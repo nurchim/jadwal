@@ -3,111 +3,122 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <meta name="description" content="Aplikasi plotting jadwal perkuliahan tanpa database. Data tersimpan di browser." />
-  <title>Plotting Jadwal Perkuliahan</title>
+  <meta name="description" content="Aplikasi plotting jadwal perkuliahan Jumat dan Sabtu tanpa database." />
+  <title>Plotting Jadwal Jumat & Sabtu</title>
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
   <header class="app-header">
     <div class="header-inner">
-      <div>
-        <p class="eyebrow">Aplikasi Akademik</p>
-        <h1>Plotting Jadwal Perkuliahan</h1>
-        <p class="subtitle">Atur dosen, ruang, hari, dan jam mengajar tanpa bentrok.</p>
+      <div class="brand-block">
+        <div class="brand-mark">PJ</div>
+        <div>
+          <p class="eyebrow">PENJADWALAN PERKULIAHAN</p>
+          <h1>Plotting Jadwal Jumat & Sabtu</h1>
+          <p class="subtitle">Mudah digunakan, tanpa database, dan otomatis mencegah bentrok dosen maupun ruang.</p>
+        </div>
       </div>
       <div class="header-actions">
-        <button class="btn btn-light" id="btnPrint" type="button">🖨️ Cetak Jadwal</button>
-        <button class="btn btn-light" id="btnExport" type="button">⬇️ Backup Data</button>
+        <button class="btn btn-header" id="btnPrint" type="button">Cetak Plot</button>
+        <button class="btn btn-header" id="btnExport" type="button">Backup Data</button>
       </div>
     </div>
   </header>
 
   <main class="container">
-    <section class="notice" aria-label="Informasi penyimpanan">
-      <div class="notice-icon">💾</div>
+    <section class="notice" aria-label="Informasi penting">
+      <div class="notice-icon" aria-hidden="true">i</div>
       <div>
-        <strong>Data tersimpan otomatis di browser perangkat ini.</strong>
-        <p>Tidak menggunakan database. Gunakan menu Backup Data secara berkala jika jadwal penting.</p>
+        <strong>Data tersimpan otomatis pada browser perangkat ini.</strong>
+        <p>Aplikasi tidak memakai database. Lakukan <b>Backup Data</b> secara berkala agar data dapat dipindahkan atau dipulihkan.</p>
       </div>
     </section>
 
     <section class="stats" aria-label="Ringkasan data">
-      <article class="stat-card"><span>Dosen</span><strong id="statLecturers">0</strong></article>
-      <article class="stat-card"><span>Ruang</span><strong id="statRooms">0</strong></article>
-      <article class="stat-card"><span>Jadwal</span><strong id="statSchedules">0</strong></article>
-      <article class="stat-card"><span>Hari Terpakai</span><strong id="statDays">0</strong></article>
+      <article class="stat-card"><span>Jumlah Dosen</span><strong id="statLecturers">0</strong></article>
+      <article class="stat-card"><span>Jumlah Ruang</span><strong id="statRooms">0</strong></article>
+      <article class="stat-card"><span>Jadwal Tersimpan</span><strong id="statSchedules">0</strong></article>
+      <article class="stat-card"><span>Sesi Terisi</span><strong id="statFilledSessions">0</strong></article>
     </section>
 
-    <nav class="tabs" aria-label="Navigasi aplikasi">
-      <button class="tab active" data-tab="schedule" type="button">📅 Buat Jadwal</button>
-      <button class="tab" data-tab="master" type="button">👥 Data Dosen & Ruang</button>
-      <button class="tab" data-tab="plot" type="button">🗓️ Plot Mingguan</button>
-      <button class="tab" data-tab="backup" type="button">🛡️ Backup & Pemulihan</button>
+    <nav class="tabs" aria-label="Menu utama">
+      <button class="tab active" data-tab="schedule" type="button">1. Buat Jadwal</button>
+      <button class="tab" data-tab="master" type="button">2. Data Dosen & Ruang</button>
+      <button class="tab" data-tab="lecturer-detail" type="button">3. Detail Dosen</button>
+      <button class="tab" data-tab="plot" type="button">4. Plot Jumat–Sabtu</button>
+      <button class="tab" data-tab="backup" type="button">5. Backup</button>
     </nav>
 
     <section class="tab-panel active" id="tab-schedule">
-      <div class="panel-grid">
+      <div class="panel-grid schedule-grid">
         <article class="card form-card">
           <div class="card-heading">
-            <div>
-              <p class="step-label">LANGKAH 1</p>
-              <h2 id="scheduleFormTitle">Tambah Jadwal Kuliah</h2>
-              <p>Isi semua data wajib bertanda <span class="required">*</span>.</p>
-            </div>
+            <p class="step-label">INPUT JADWAL</p>
+            <h2 id="scheduleFormTitle">Tambah Jadwal Perkuliahan</h2>
+            <p>Pilih hari dan sesi yang tersedia, lalu tentukan satu atau beberapa dosen pengampu.</p>
           </div>
 
           <form id="scheduleForm" autocomplete="off">
             <input type="hidden" id="scheduleId" />
-            <div class="form-grid two">
-              <label>
-                Mata Kuliah <span class="required">*</span>
-                <input id="courseName" type="text" placeholder="Contoh: Pemrograman Web" required maxlength="100" />
-              </label>
-              <label>
-                Kelas <span class="required">*</span>
-                <input id="className" type="text" placeholder="Contoh: TI-3A" required maxlength="50" />
-              </label>
-            </div>
 
             <div class="form-grid two">
               <label>
-                Dosen <span class="required">*</span>
-                <select id="lecturerSelect" required></select>
+                Nama Mata Kuliah <span class="required">*</span>
+                <input id="courseName" type="text" placeholder="Contoh: Sistem Informasi Manajemen" required maxlength="120" />
               </label>
+              <label>
+                Program Studi <span class="required">*</span>
+                <input id="programStudy" type="text" placeholder="Contoh: Magister Manajemen" required maxlength="100" />
+              </label>
+            </div>
+
+            <div class="form-grid three">
+              <label>
+                Angkatan <span class="required">*</span>
+                <input id="cohort" type="text" placeholder="Contoh: 2026" required maxlength="50" />
+              </label>
+              <label>
+                Hari <span class="required">*</span>
+                <select id="daySelect" required>
+                  <option value="">Pilih hari</option>
+                  <option value="Jumat">Jumat</option>
+                  <option value="Sabtu">Sabtu</option>
+                </select>
+              </label>
+              <label>
+                Sesi / Jam Mengajar <span class="required">*</span>
+                <select id="sessionSelect" required disabled>
+                  <option value="">Pilih hari terlebih dahulu</option>
+                </select>
+              </label>
+            </div>
+
+            <div class="form-grid one">
               <label>
                 Ruang <span class="required">*</span>
                 <select id="roomSelect" required></select>
               </label>
             </div>
 
-            <div class="form-grid three">
-              <label>
-                Hari <span class="required">*</span>
-                <select id="daySelect" required>
-                  <option value="">Pilih hari</option>
-                  <option>Senin</option><option>Selasa</option><option>Rabu</option>
-                  <option>Kamis</option><option>Jumat</option><option>Sabtu</option>
-                </select>
-              </label>
-              <label>
-                Jam Mulai <span class="required">*</span>
-                <input id="startTime" type="time" required />
-              </label>
-              <label>
-                Jam Selesai <span class="required">*</span>
-                <input id="endTime" type="time" required />
-              </label>
-            </div>
+            <fieldset class="lecturer-fieldset">
+              <legend>Dosen Pengampu <span class="required">*</span></legend>
+              <p class="field-help">Satu sesi dapat diampu lebih dari satu dosen. Centang semua dosen yang mengajar bersama.</p>
+              <div class="lecturer-toolbar">
+                <input id="lecturerSearch" type="search" placeholder="Cari nama dosen..." aria-label="Cari nama dosen" />
+                <button class="btn btn-small btn-secondary" id="btnClearLecturers" type="button">Kosongkan Pilihan</button>
+              </div>
+              <div id="lecturerChoices" class="lecturer-choices"></div>
+            </fieldset>
 
-            <label>
+            <label class="notes-label">
               Catatan <span class="optional">(opsional)</span>
-              <textarea id="notes" rows="3" placeholder="Contoh: Praktikum / 3 SKS / kelas pengganti" maxlength="250"></textarea>
+              <textarea id="notes" rows="3" placeholder="Contoh: Tatap muka / hybrid / catatan khusus" maxlength="300"></textarea>
             </label>
 
             <div id="conflictBox" class="conflict-box hidden" role="alert"></div>
 
             <div class="form-actions">
-              <button class="btn btn-primary" id="btnSaveSchedule" type="submit">➕ Simpan Jadwal</button>
+              <button class="btn btn-primary" id="btnSaveSchedule" type="submit">Simpan Jadwal</button>
               <button class="btn btn-secondary hidden" id="btnCancelEdit" type="button">Batal Edit</button>
             </div>
           </form>
@@ -116,16 +127,16 @@
         <article class="card">
           <div class="card-heading inline">
             <div>
-              <p class="step-label">LANGKAH 2</p>
+              <p class="step-label">JADWAL TERSIMPAN</p>
               <h2>Daftar Jadwal</h2>
-              <p>Jadwal diurutkan berdasarkan hari dan jam.</p>
+              <p>Gunakan filter untuk menampilkan jadwal Jumat atau Sabtu.</p>
             </div>
             <div class="filter-box">
               <label for="filterDay">Filter hari</label>
               <select id="filterDay">
-                <option value="Semua">Semua hari</option>
-                <option>Senin</option><option>Selasa</option><option>Rabu</option>
-                <option>Kamis</option><option>Jumat</option><option>Sabtu</option>
+                <option value="Semua">Semua</option>
+                <option value="Jumat">Jumat</option>
+                <option value="Sabtu">Sabtu</option>
               </select>
             </div>
           </div>
@@ -138,57 +149,75 @@
       <div class="panel-grid">
         <article class="card">
           <div class="card-heading">
-            <p class="step-label">MASTER DATA</p>
+            <p class="step-label">MASTER DOSEN</p>
             <h2>Data Dosen</h2>
-            <p>Tambahkan dosen sebelum membuat jadwal.</p>
+            <p>Nama dosen tidak boleh sama. Data ini akan muncul saat membuat jadwal.</p>
           </div>
           <form id="lecturerForm" class="compact-form">
             <label>
               Nama Dosen <span class="required">*</span>
-              <input id="lecturerName" type="text" placeholder="Contoh: Dr. Budi Santoso, M.Kom." required maxlength="100" />
+              <input id="lecturerName" type="text" placeholder="Contoh: Dr. Budi Santoso, M.Kom." required maxlength="120" />
             </label>
             <label>
               NIDN / Kode <span class="optional">(opsional)</span>
-              <input id="lecturerCode" type="text" placeholder="Contoh: 0612345678" maxlength="30" />
+              <input id="lecturerCode" type="text" placeholder="Contoh: 0612345678" maxlength="40" />
             </label>
-            <button class="btn btn-primary" type="submit">➕ Tambah Dosen</button>
+            <button class="btn btn-primary" type="submit">Tambah Dosen</button>
           </form>
           <div id="lecturerList" class="master-list"></div>
         </article>
 
         <article class="card">
           <div class="card-heading">
-            <p class="step-label">MASTER DATA</p>
+            <p class="step-label">MASTER RUANG</p>
             <h2>Data Ruang</h2>
-            <p>Nama ruang tidak boleh sama.</p>
+            <p>Secara awal tersedia Ruang 1 sampai Ruang 6 sesuai format template. Anda tetap dapat menambah ruang.</p>
           </div>
           <form id="roomForm" class="compact-form">
             <label>
               Nama Ruang <span class="required">*</span>
-              <input id="roomName" type="text" placeholder="Contoh: Lab Komputer 1" required maxlength="80" />
+              <input id="roomName" type="text" placeholder="Contoh: Ruang 7" required maxlength="80" />
             </label>
             <label>
               Kapasitas <span class="optional">(opsional)</span>
-              <input id="roomCapacity" type="number" min="1" max="1000" placeholder="Contoh: 40" />
+              <input id="roomCapacity" type="number" min="1" max="2000" placeholder="Contoh: 40" />
             </label>
-            <button class="btn btn-primary" type="submit">➕ Tambah Ruang</button>
+            <button class="btn btn-primary" type="submit">Tambah Ruang</button>
           </form>
           <div id="roomList" class="master-list"></div>
         </article>
       </div>
     </section>
 
+    <section class="tab-panel" id="tab-lecturer-detail">
+      <article class="card detail-card">
+        <div class="card-heading inline">
+          <div>
+            <p class="step-label">BEBAN MENGAJAR</p>
+            <h2>Detail Dosen</h2>
+            <p>Pilih dosen untuk melihat mata kuliah, program studi, angkatan, hari, jam, dan ruang mengajar.</p>
+          </div>
+          <div class="filter-box lecturer-filter">
+            <label for="detailLecturerSelect">Pilih dosen</label>
+            <select id="detailLecturerSelect"></select>
+          </div>
+        </div>
+        <div id="lecturerDetailSummary" class="detail-summary"></div>
+        <div id="lecturerDetailList" class="detail-list"></div>
+      </article>
+    </section>
+
     <section class="tab-panel" id="tab-plot">
       <article class="card plot-card">
         <div class="card-heading inline">
           <div>
-            <p class="step-label">PLOTTING</p>
-            <h2>Jadwal Mingguan</h2>
-            <p>Tampilan ringkas untuk mengecek sebaran jadwal per hari.</p>
+            <p class="step-label">PLOTTING SESUAI TEMPLATE</p>
+            <h2>Plot Jadwal Jumat & Sabtu</h2>
+            <p>Baris menunjukkan sesi waktu dan kolom menunjukkan ruang. Sabtu memiliki baris istirahat 18.10–18.30.</p>
           </div>
-          <button class="btn btn-secondary" id="btnPrintPlot" type="button">🖨️ Cetak</button>
+          <button class="btn btn-secondary" id="btnPrintPlot" type="button">Cetak Plot</button>
         </div>
-        <div id="weeklyPlot" class="weekly-plot"></div>
+        <div id="plotTables" class="plot-tables"></div>
       </article>
     </section>
 
@@ -198,28 +227,40 @@
           <div class="card-heading">
             <p class="step-label">BACKUP</p>
             <h2>Simpan Salinan Data</h2>
-            <p>Unduh data dosen, ruang, dan jadwal dalam satu file JSON.</p>
+            <p>Unduh seluruh data dosen, ruang, dan jadwal ke file JSON.</p>
           </div>
-          <button class="btn btn-primary btn-wide" id="btnExportLarge" type="button">⬇️ Download Backup Data</button>
+          <button class="btn btn-primary btn-wide" id="btnExportLarge" type="button">Download Backup Data</button>
         </article>
+
         <article class="card">
           <div class="card-heading">
             <p class="step-label">PEMULIHAN</p>
             <h2>Impor Backup</h2>
-            <p>Pilih file backup JSON yang sebelumnya dibuat dari aplikasi ini.</p>
+            <p>Pilih file JSON hasil backup dari aplikasi ini. Data saat ini akan diganti setelah konfirmasi.</p>
           </div>
           <label class="file-drop">
-            <span>📁 Pilih File Backup</span>
+            <span>Pilih File Backup JSON</span>
             <input id="importFile" type="file" accept="application/json,.json" />
           </label>
-          <button class="btn btn-danger-outline btn-wide" id="btnReset" type="button">🗑️ Hapus Semua Data</button>
+          <button class="btn btn-danger-outline btn-wide" id="btnReset" type="button">Hapus Semua Data Jadwal</button>
         </article>
       </div>
     </section>
   </main>
 
+  <div id="confirmModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="confirmTitle">
+    <div class="modal-card">
+      <h3 id="confirmTitle">Konfirmasi</h3>
+      <p id="confirmMessage"></p>
+      <div class="modal-actions">
+        <button class="btn btn-secondary" id="confirmCancel" type="button">Batal</button>
+        <button class="btn btn-danger" id="confirmOk" type="button">Ya, Lanjutkan</button>
+      </div>
+    </div>
+  </div>
+
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
-  <footer class="footer">Plotting Jadwal Perkuliahan • Tanpa Database • Data tersimpan di perangkat</footer>
+  <footer class="footer">Plotting Jadwal Perkuliahan Jumat–Sabtu • Tanpa Database • Data tersimpan pada perangkat</footer>
   <script src="app.js"></script>
 </body>
 </html>
