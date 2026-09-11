@@ -1,390 +1,903 @@
 (() => {
   'use strict';
 
-  const STORAGE_KEY = 'plottingJadwalKuliah_v1';
-  const DAYS = ['Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
+  const STORAGE_KEY = 'plottingJadwalJumatSabtu_v2';
+  const OLD_STORAGE_KEY = 'plottingJadwalKuliah_v1';
+  const DATA_VERSION = 2;
 
-  const emptyData = () => ({ lecturers: [], rooms: [], schedules: [] });
-  let data = loadData();
-  let toastTimer;
+  const SESSIONS = {
+    Jumat: [
+      { id: 'JMT-1', start: '16:00', end: '16:50' },
+      { id: 'JMT-2', start: '16:50', end: '17:40' },
+      { id: 'JMT-3', start: '17:40', end: '18:30' },
+      { id: 'JMT-4', start: '18:30', end: '19:20' },
+      { id: 'JMT-5', start: '19:20', end: '20:10' },
+      { id: 'JMT-6', start: '20:10', end: '21:00' }
+    ],
+    Sabtu: [
+      { id: 'SBT-1', start: '14:00', end: '14:50' },
+      { id: 'SBT-2', start: '14:50', end: '15:40' },
+      { id: 'SBT-3', start: '15:40', end: '16:30' },
+      { id: 'SBT-4', start: '16:30', end: '17:20' },
+      { id: 'SBT-5', start: '17:20', end: '18:10' },
+      { id: 'SBT-6', start: '18:30', end: '19:20' },
+      { id: 'SBT-7', start: '19:20', end: '20:10' },
+      { id: 'SBT-8', start: '20:10', end: '21:00' }
+    ]
+  };
+
+  const defaultRooms = () => Array.from({ length: 6 }, (_, i) => ({
+    id: uid('room'),
+    name: `Ruang ${i + 1}`,
+    capacity: ''
+  }));
+
+  const emptyData = () => ({
+    version: DATA_VERSION,
+    lecturers: [],
+    rooms: defaultRooms(),
+    schedules: []
+  });
 
   const $ = (id) => document.getElementById(id);
   const els = {
-    lecturerForm: $('lecturerForm'), lecturerName: $('lecturerName'), lecturerCode: $('lecturerCode'), lecturerList: $('lecturerList'),
-    roomForm: $('roomForm'), roomName: $('roomName'), roomCapacity: $('roomCapacity'), roomList: $('roomList'),
-    scheduleForm: $('scheduleForm'), scheduleId: $('scheduleId'), courseName: $('courseName'), className: $('className'),
-    lecturerSelect: $('lecturerSelect'), roomSelect: $('roomSelect'), daySelect: $('daySelect'), startTime: $('startTime'), endTime: $('endTime'), notes: $('notes'),
-    conflictBox: $('conflictBox'), btnSaveSchedule: $('btnSaveSchedule'), btnCancelEdit: $('btnCancelEdit'), scheduleFormTitle: $('scheduleFormTitle'),
-    scheduleList: $('scheduleList'), filterDay: $('filterDay'), weeklyPlot: $('weeklyPlot'),
-    statLecturers: $('statLecturers'), statRooms: $('statRooms'), statSchedules: $('statSchedules'), statDays: $('statDays'),
-    btnPrint: $('btnPrint'), btnPrintPlot: $('btnPrintPlot'), btnExport: $('btnExport'), btnExportLarge: $('btnExportLarge'), importFile: $('importFile'), btnReset: $('btnReset'),
-    toast: $('toast')
+    lecturerForm: $('lecturerForm'),
+    lecturerName: $('lecturerName'),
+    lecturerCode: $('lecturerCode'),
+    lecturerList: $('lecturerList'),
+    roomForm: $('roomForm'),
+    roomName: $('roomName'),
+    roomCapacity: $('roomCapacity'),
+    roomList: $('roomList'),
+    scheduleForm: $('scheduleForm'),
+    scheduleId: $('scheduleId'),
+    scheduleFormTitle: $('scheduleFormTitle'),
+    courseName: $('courseName'),
+    programStudy: $('programStudy'),
+    cohort: $('cohort'),
+    daySelect: $('daySelect'),
+    sessionSelect: $('sessionSelect'),
+    roomSelect: $('roomSelect'),
+    lecturerChoices: $('lecturerChoices'),
+    lecturerSearch: $('lecturerSearch'),
+    btnClearLecturers: $('btnClearLecturers'),
+    notes: $('notes'),
+    conflictBox: $('conflictBox'),
+    btnSaveSchedule: $('btnSaveSchedule'),
+    btnCancelEdit: $('btnCancelEdit'),
+    scheduleList: $('scheduleList'),
+    filterDay: $('filterDay'),
+    detailLecturerSelect: $('detailLecturerSelect'),
+    lecturerDetailSummary: $('lecturerDetailSummary'),
+    lecturerDetailList: $('lecturerDetailList'),
+    plotTables: $('plotTables'),
+    statLecturers: $('statLecturers'),
+    statRooms: $('statRooms'),
+    statSchedules: $('statSchedules'),
+    statFilledSessions: $('statFilledSessions'),
+    btnPrint: $('btnPrint'),
+    btnPrintPlot: $('btnPrintPlot'),
+    btnExport: $('btnExport'),
+    btnExportLarge: $('btnExportLarge'),
+    importFile: $('importFile'),
+    btnReset: $('btnReset'),
+    toast: $('toast'),
+    confirmModal: $('confirmModal'),
+    confirmTitle: $('confirmTitle'),
+    confirmMessage: $('confirmMessage'),
+    confirmCancel: $('confirmCancel'),
+    confirmOk: $('confirmOk')
   };
 
-  function uid(prefix) {
-    return `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+  let data = loadData();
+  let draftLecturerIds = new Set();
+  let toastTimer;
+  let confirmResolver = null;
+
+  init();
+
+  function init() {
+    bindEvents();
+    renderAll();
   }
 
-  function escapeHtml(value = '') {
-    return String(value).replace(/[&<>'"]/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[ch]));
+  function bindEvents() {
+    document.querySelectorAll('.tab').forEach((tab) => {
+      tab.addEventListener('click', () => activateTab(tab.dataset.tab));
+    });
+
+    els.lecturerForm.addEventListener('submit', onAddLecturer);
+    els.roomForm.addEventListener('submit', onAddRoom);
+    els.scheduleForm.addEventListener('submit', onSaveSchedule);
+    els.daySelect.addEventListener('change', () => {
+      renderSessionOptions();
+      previewConflict();
+    });
+    els.sessionSelect.addEventListener('change', previewConflict);
+    els.roomSelect.addEventListener('change', previewConflict);
+    els.lecturerChoices.addEventListener('change', (event) => {
+      const checkbox = event.target.closest('input[name="lecturerIds"]');
+      if (checkbox) {
+        if (checkbox.checked) draftLecturerIds.add(checkbox.value);
+        else draftLecturerIds.delete(checkbox.value);
+      }
+      previewConflict();
+    });
+    els.lecturerSearch.addEventListener('input', () => renderLecturerChoices());
+    els.btnClearLecturers.addEventListener('click', () => {
+      draftLecturerIds.clear();
+      renderLecturerChoices();
+      previewConflict();
+    });
+    els.btnCancelEdit.addEventListener('click', resetScheduleForm);
+    els.filterDay.addEventListener('change', renderScheduleList);
+    els.detailLecturerSelect.addEventListener('change', renderLecturerDetail);
+    els.btnPrint.addEventListener('click', printPlot);
+    els.btnPrintPlot.addEventListener('click', printPlot);
+    els.btnExport.addEventListener('click', exportData);
+    els.btnExportLarge.addEventListener('click', exportData);
+    els.importFile.addEventListener('change', importData);
+    els.btnReset.addEventListener('click', resetAllData);
+
+    els.confirmCancel.addEventListener('click', () => closeConfirm(false));
+    els.confirmOk.addEventListener('click', () => closeConfirm(true));
+    els.confirmModal.addEventListener('click', (event) => {
+      if (event.target === els.confirmModal) closeConfirm(false);
+    });
+    document.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape' && !els.confirmModal.classList.contains('hidden')) closeConfirm(false);
+    });
+  }
+
+  function activateTab(name) {
+    document.querySelectorAll('.tab').forEach((tab) => tab.classList.toggle('active', tab.dataset.tab === name));
+    document.querySelectorAll('.tab-panel').forEach((panel) => panel.classList.remove('active'));
+    const target = $(`tab-${name}`);
+    if (target) target.classList.add('active');
+    if (name === 'plot') renderPlot();
+    if (name === 'lecturer-detail') renderLecturerDetail();
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  function uid(prefix = 'id') {
+    if (globalThis.crypto && typeof globalThis.crypto.randomUUID === 'function') {
+      return `${prefix}-${globalThis.crypto.randomUUID()}`;
+    }
+    return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+  }
+
+  function normalizeText(value) {
+    return String(value || '').trim().replace(/\s+/g, ' ');
+  }
+
+  function escapeHtml(value) {
+    return String(value ?? '')
+      .replaceAll('&', '&amp;')
+      .replaceAll('<', '&lt;')
+      .replaceAll('>', '&gt;')
+      .replaceAll('"', '&quot;')
+      .replaceAll("'", '&#039;');
+  }
+
+  function displayTime(start, end) {
+    return `${start.replace(':', '.')} – ${end.replace(':', '.')}`;
+  }
+
+  function sessionById(day, id) {
+    return (SESSIONS[day] || []).find((session) => session.id === id) || null;
+  }
+
+  function timeToMinutes(time) {
+    const [h, m] = String(time).split(':').map(Number);
+    return h * 60 + m;
+  }
+
+  function sessionsOverlap(a, b) {
+    return timeToMinutes(a.start) < timeToMinutes(b.end) && timeToMinutes(b.start) < timeToMinutes(a.end);
+  }
+
+  function sortRooms(rooms) {
+    return [...rooms].sort((a, b) => a.name.localeCompare(b.name, 'id', { numeric: true, sensitivity: 'base' }));
+  }
+
+  function sortLecturers(lecturers) {
+    return [...lecturers].sort((a, b) => a.name.localeCompare(b.name, 'id', { sensitivity: 'base' }));
   }
 
   function loadData() {
     try {
       const raw = localStorage.getItem(STORAGE_KEY);
-      if (!raw) return emptyData();
-      const parsed = JSON.parse(raw);
-      return normalizeData(parsed);
-    } catch (_) {
-      return emptyData();
+      if (raw) return sanitizeData(JSON.parse(raw));
+
+      const oldRaw = localStorage.getItem(OLD_STORAGE_KEY);
+      if (oldRaw) {
+        const migrated = migrateOldData(JSON.parse(oldRaw));
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(migrated));
+        return migrated;
+      }
+    } catch (error) {
+      console.warn('Gagal membaca data lokal:', error);
     }
+    return emptyData();
   }
 
-  function normalizeData(value) {
-    return {
-      lecturers: Array.isArray(value?.lecturers) ? value.lecturers : [],
-      rooms: Array.isArray(value?.rooms) ? value.rooms : [],
-      schedules: Array.isArray(value?.schedules) ? value.schedules : []
+  function sanitizeData(candidate) {
+    const safe = {
+      version: DATA_VERSION,
+      lecturers: Array.isArray(candidate?.lecturers) ? candidate.lecturers : [],
+      rooms: Array.isArray(candidate?.rooms) && candidate.rooms.length ? candidate.rooms : defaultRooms(),
+      schedules: Array.isArray(candidate?.schedules) ? candidate.schedules : []
     };
+
+    safe.lecturers = safe.lecturers
+      .filter((item) => item && item.id && item.name)
+      .map((item) => ({ id: String(item.id), name: normalizeText(item.name), code: normalizeText(item.code) }));
+
+    safe.rooms = safe.rooms
+      .filter((item) => item && item.id && item.name)
+      .map((item) => ({ id: String(item.id), name: normalizeText(item.name), capacity: normalizeText(item.capacity) }));
+
+    safe.schedules = safe.schedules
+      .filter((item) => item && item.id && (item.day === 'Jumat' || item.day === 'Sabtu'))
+      .map((item) => ({
+        id: String(item.id),
+        courseName: normalizeText(item.courseName),
+        programStudy: normalizeText(item.programStudy || 'Belum diisi'),
+        cohort: normalizeText(item.cohort || item.className || 'Belum diisi'),
+        day: item.day,
+        sessionId: String(item.sessionId || ((SESSIONS[item.day] || []).find((session) => session.start === item.startTime && session.end === item.endTime)?.id || '')),
+        roomId: String(item.roomId || ''),
+        lecturerIds: Array.isArray(item.lecturerIds) ? [...new Set(item.lecturerIds.map(String))] : (item.lecturerId ? [String(item.lecturerId)] : []),
+        notes: normalizeText(item.notes),
+        createdAt: item.createdAt || new Date().toISOString()
+      }))
+      .filter((item) => sessionById(item.day, item.sessionId));
+
+    return safe;
+  }
+
+  function migrateOldData(old) {
+    const migrated = sanitizeData({
+      version: DATA_VERSION,
+      lecturers: old?.lecturers || [],
+      rooms: old?.rooms || [],
+      schedules: (old?.schedules || []).map((schedule) => {
+        if (!['Jumat', 'Sabtu'].includes(schedule.day)) return null;
+        const matchingSession = (SESSIONS[schedule.day] || []).find((session) => session.start === schedule.startTime && session.end === schedule.endTime);
+        if (!matchingSession) return null;
+        return {
+          ...schedule,
+          sessionId: matchingSession.id,
+          lecturerIds: schedule.lecturerId ? [schedule.lecturerId] : [],
+          programStudy: schedule.programStudy || 'Belum diisi',
+          cohort: schedule.cohort || schedule.className || 'Belum diisi'
+        };
+      }).filter(Boolean)
+    });
+    if (!migrated.rooms.length) migrated.rooms = defaultRooms();
+    return migrated;
   }
 
   function saveData() {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+  }
+
+  function onAddLecturer(event) {
+    event.preventDefault();
+    const name = normalizeText(els.lecturerName.value);
+    const code = normalizeText(els.lecturerCode.value);
+    if (!name) return;
+
+    const duplicate = data.lecturers.some((item) => item.name.toLocaleLowerCase('id') === name.toLocaleLowerCase('id'));
+    if (duplicate) {
+      showToast('Nama dosen tersebut sudah ada. Gunakan nama yang berbeda.', 'error');
+      els.lecturerName.focus();
+      return;
+    }
+
+    data.lecturers.push({ id: uid('lecturer'), name, code });
+    saveData();
+    els.lecturerForm.reset();
     renderAll();
+    showToast('Dosen berhasil ditambahkan.', 'success');
   }
 
-  function showToast(message, type = 'success') {
-    clearTimeout(toastTimer);
-    els.toast.textContent = message;
-    els.toast.className = `toast show ${type}`;
-    toastTimer = setTimeout(() => { els.toast.className = 'toast'; }, 2800);
+  function onAddRoom(event) {
+    event.preventDefault();
+    const name = normalizeText(els.roomName.value);
+    const capacity = normalizeText(els.roomCapacity.value);
+    if (!name) return;
+
+    const duplicate = data.rooms.some((item) => item.name.toLocaleLowerCase('id') === name.toLocaleLowerCase('id'));
+    if (duplicate) {
+      showToast('Nama ruang tersebut sudah ada. Gunakan nama yang berbeda.', 'error');
+      els.roomName.focus();
+      return;
+    }
+
+    data.rooms.push({ id: uid('room'), name, capacity });
+    saveData();
+    els.roomForm.reset();
+    renderAll();
+    showToast('Ruang berhasil ditambahkan.', 'success');
   }
 
-  function switchTab(tabName) {
-    document.querySelectorAll('.tab').forEach((tab) => tab.classList.toggle('active', tab.dataset.tab === tabName));
-    document.querySelectorAll('.tab-panel').forEach((panel) => panel.classList.toggle('active', panel.id === `tab-${tabName}`));
+  async function removeLecturer(id) {
+    const lecturer = data.lecturers.find((item) => item.id === id);
+    if (!lecturer) return;
+
+    const used = data.schedules.filter((schedule) => schedule.lecturerIds.includes(id));
+    if (used.length) {
+      showToast(`Dosen masih digunakan pada ${used.length} jadwal. Hapus atau ubah jadwalnya terlebih dahulu.`, 'error');
+      return;
+    }
+
+    const ok = await askConfirm('Hapus Dosen', `Hapus ${lecturer.name} dari data dosen?`);
+    if (!ok) return;
+    data.lecturers = data.lecturers.filter((item) => item.id !== id);
+    draftLecturerIds.delete(id);
+    saveData();
+    renderAll();
+    showToast('Dosen berhasil dihapus.', 'success');
+  }
+
+  async function removeRoom(id) {
+    const room = data.rooms.find((item) => item.id === id);
+    if (!room) return;
+
+    const used = data.schedules.filter((schedule) => schedule.roomId === id);
+    if (used.length) {
+      showToast(`Ruang masih digunakan pada ${used.length} jadwal. Hapus atau ubah jadwalnya terlebih dahulu.`, 'error');
+      return;
+    }
+
+    const ok = await askConfirm('Hapus Ruang', `Hapus ${room.name} dari data ruang?`);
+    if (!ok) return;
+    data.rooms = data.rooms.filter((item) => item.id !== id);
+    saveData();
+    renderAll();
+    showToast('Ruang berhasil dihapus.', 'success');
+  }
+
+  function getSelectedLecturerIds() {
+    return [...draftLecturerIds];
+  }
+
+  function getScheduleFormValue() {
+    return {
+      id: els.scheduleId.value || uid('schedule'),
+      courseName: normalizeText(els.courseName.value),
+      programStudy: normalizeText(els.programStudy.value),
+      cohort: normalizeText(els.cohort.value),
+      day: els.daySelect.value,
+      sessionId: els.sessionSelect.value,
+      roomId: els.roomSelect.value,
+      lecturerIds: getSelectedLecturerIds(),
+      notes: normalizeText(els.notes.value),
+      createdAt: new Date().toISOString()
+    };
+  }
+
+  function validateSchedule(candidate, ignoreId = '') {
+    const errors = [];
+    if (!candidate.courseName) errors.push('Nama mata kuliah wajib diisi.');
+    if (!candidate.programStudy) errors.push('Program studi wajib diisi.');
+    if (!candidate.cohort) errors.push('Angkatan wajib diisi.');
+    if (!['Jumat', 'Sabtu'].includes(candidate.day)) errors.push('Pilih hari Jumat atau Sabtu.');
+    const candidateSession = sessionById(candidate.day, candidate.sessionId);
+    if (!candidateSession) errors.push('Pilih sesi/jam mengajar yang tersedia.');
+    if (!candidate.roomId || !data.rooms.some((room) => room.id === candidate.roomId)) errors.push('Pilih ruang yang tersedia.');
+    if (!candidate.lecturerIds.length) errors.push('Pilih minimal satu dosen pengampu.');
+    if (candidate.lecturerIds.some((id) => !data.lecturers.some((lecturer) => lecturer.id === id))) errors.push('Terdapat dosen yang sudah tidak tersedia.');
+
+    if (!candidateSession) return { errors, conflicts: [] };
+
+    const conflicts = [];
+    for (const existing of data.schedules) {
+      if (existing.id === ignoreId || existing.day !== candidate.day) continue;
+      const existingSession = sessionById(existing.day, existing.sessionId);
+      if (!existingSession || !sessionsOverlap(candidateSession, existingSession)) continue;
+
+      if (existing.roomId === candidate.roomId) {
+        conflicts.push({ type: 'room', schedule: existing, roomId: candidate.roomId });
+      }
+
+      const lecturerClashes = candidate.lecturerIds.filter((id) => existing.lecturerIds.includes(id));
+      lecturerClashes.forEach((lecturerId) => conflicts.push({ type: 'lecturer', schedule: existing, lecturerId }));
+    }
+
+    return { errors, conflicts };
+  }
+
+  function onSaveSchedule(event) {
+    event.preventDefault();
+    const candidate = getScheduleFormValue();
+    const editingId = els.scheduleId.value;
+    const validation = validateSchedule(candidate, editingId);
+
+    if (validation.errors.length || validation.conflicts.length) {
+      showConflict(validation);
+      showToast('Jadwal belum dapat disimpan. Periksa pesan validasi.', 'error');
+      return;
+    }
+
+    if (editingId) {
+      const index = data.schedules.findIndex((item) => item.id === editingId);
+      if (index >= 0) candidate.createdAt = data.schedules[index].createdAt || candidate.createdAt;
+      if (index >= 0) data.schedules[index] = candidate;
+    } else {
+      data.schedules.push(candidate);
+    }
+
+    saveData();
+    resetScheduleForm();
+    renderAll();
+    showToast(editingId ? 'Perubahan jadwal berhasil disimpan.' : 'Jadwal berhasil ditambahkan.', 'success');
+  }
+
+  function showConflict(validation) {
+    const lines = [];
+    validation.errors.forEach((message) => lines.push(`<li>${escapeHtml(message)}</li>`));
+
+    const seen = new Set();
+    validation.conflicts.forEach((conflict) => {
+      const schedule = conflict.schedule;
+      const session = sessionById(schedule.day, schedule.sessionId);
+      if (!session) return;
+      if (conflict.type === 'room') {
+        const room = data.rooms.find((item) => item.id === conflict.roomId);
+        const key = `room-${schedule.id}-${conflict.roomId}`;
+        if (!seen.has(key)) {
+          lines.push(`<li><b>Bentrok ruang:</b> ${escapeHtml(room?.name || 'Ruang')} sudah dipakai oleh <b>${escapeHtml(schedule.courseName)}</b> pada ${escapeHtml(displayTime(session.start, session.end))}.</li>`);
+          seen.add(key);
+        }
+      } else {
+        const lecturer = data.lecturers.find((item) => item.id === conflict.lecturerId);
+        const key = `lecturer-${schedule.id}-${conflict.lecturerId}`;
+        if (!seen.has(key)) {
+          lines.push(`<li><b>Bentrok dosen:</b> ${escapeHtml(lecturer?.name || 'Dosen')} sudah mengajar <b>${escapeHtml(schedule.courseName)}</b> pada ${escapeHtml(displayTime(session.start, session.end))}.</li>`);
+          seen.add(key);
+        }
+      }
+    });
+
+    if (!lines.length) {
+      els.conflictBox.classList.add('hidden');
+      els.conflictBox.innerHTML = '';
+      return;
+    }
+
+    els.conflictBox.innerHTML = `<strong>Jadwal belum dapat disimpan:</strong><ul>${lines.join('')}</ul>`;
+    els.conflictBox.classList.remove('hidden');
+  }
+
+  function previewConflict() {
+    if (!els.daySelect.value || !els.sessionSelect.value) {
+      els.conflictBox.classList.add('hidden');
+      return;
+    }
+    const candidate = getScheduleFormValue();
+    const validation = validateSchedule(candidate, els.scheduleId.value);
+    const relevant = { errors: [], conflicts: validation.conflicts };
+    showConflict(relevant);
+  }
+
+  function editSchedule(id) {
+    const schedule = data.schedules.find((item) => item.id === id);
+    if (!schedule) return;
+
+    els.scheduleId.value = schedule.id;
+    els.courseName.value = schedule.courseName;
+    els.programStudy.value = schedule.programStudy;
+    els.cohort.value = schedule.cohort;
+    els.daySelect.value = schedule.day;
+    renderSessionOptions();
+    els.sessionSelect.value = schedule.sessionId;
+    els.roomSelect.value = schedule.roomId;
+    els.notes.value = schedule.notes || '';
+    els.lecturerSearch.value = '';
+    renderLecturerChoices(schedule.lecturerIds);
+    els.scheduleFormTitle.textContent = 'Edit Jadwal Perkuliahan';
+    els.btnSaveSchedule.textContent = 'Simpan Perubahan';
+    els.btnCancelEdit.classList.remove('hidden');
+    els.conflictBox.classList.add('hidden');
+    activateTab('schedule');
+    els.courseName.focus();
+  }
+
+  async function removeSchedule(id) {
+    const schedule = data.schedules.find((item) => item.id === id);
+    if (!schedule) return;
+    const ok = await askConfirm('Hapus Jadwal', `Hapus jadwal ${schedule.courseName} (${schedule.day})?`);
+    if (!ok) return;
+    data.schedules = data.schedules.filter((item) => item.id !== id);
+    saveData();
+    if (els.scheduleId.value === id) resetScheduleForm();
+    renderAll();
+    showToast('Jadwal berhasil dihapus.', 'success');
+  }
+
+  function resetScheduleForm() {
+    els.scheduleForm.reset();
+    els.scheduleId.value = '';
+    els.scheduleFormTitle.textContent = 'Tambah Jadwal Perkuliahan';
+    els.btnSaveSchedule.textContent = 'Simpan Jadwal';
+    els.btnCancelEdit.classList.add('hidden');
+    els.conflictBox.classList.add('hidden');
+    els.conflictBox.innerHTML = '';
+    els.lecturerSearch.value = '';
+    draftLecturerIds.clear();
+    renderSessionOptions();
+    renderLecturerChoices();
+    renderRoomOptions();
   }
 
   function renderAll() {
     renderStats();
-    renderMasterLists();
-    renderSelects();
-    renderSchedules();
-    renderWeeklyPlot();
+    renderLecturerList();
+    renderRoomList();
+    renderRoomOptions();
+    renderSessionOptions(true);
+    renderLecturerChoices(getSelectedLecturerIds());
+    renderScheduleList();
+    renderDetailLecturerOptions();
+    renderLecturerDetail();
+    renderPlot();
   }
 
   function renderStats() {
     els.statLecturers.textContent = data.lecturers.length;
     els.statRooms.textContent = data.rooms.length;
     els.statSchedules.textContent = data.schedules.length;
-    els.statDays.textContent = new Set(data.schedules.map((s) => s.day)).size;
+    const sessionKeys = new Set(data.schedules.map((item) => `${item.day}|${item.sessionId}`));
+    els.statFilledSessions.textContent = sessionKeys.size;
   }
 
-  function renderMasterLists() {
-    els.lecturerList.innerHTML = data.lecturers.length
-      ? data.lecturers.slice().sort((a,b) => a.name.localeCompare(b.name, 'id')).map((l) => `
-        <div class="master-item">
-          <div><strong>${escapeHtml(l.name)}</strong>${l.code ? `<small>${escapeHtml(l.code)}</small>` : ''}</div>
-          <button type="button" class="icon-btn danger" data-delete-lecturer="${l.id}" title="Hapus dosen">🗑️</button>
-        </div>`).join('')
-      : emptyState('👨‍🏫', 'Belum ada dosen', 'Tambahkan dosen menggunakan form di atas.');
+  function renderLecturerList() {
+    const lecturers = sortLecturers(data.lecturers);
+    if (!lecturers.length) {
+      els.lecturerList.innerHTML = '<div class="empty-state"><strong>Belum ada dosen.</strong>Tambahkan dosen agar dapat dipilih pada jadwal.</div>';
+      return;
+    }
 
-    els.roomList.innerHTML = data.rooms.length
-      ? data.rooms.slice().sort((a,b) => a.name.localeCompare(b.name, 'id')).map((r) => `
-        <div class="master-item">
-          <div><strong>${escapeHtml(r.name)}</strong>${r.capacity ? `<small>Kapasitas ${escapeHtml(r.capacity)} orang</small>` : ''}</div>
-          <button type="button" class="icon-btn danger" data-delete-room="${r.id}" title="Hapus ruang">🗑️</button>
-        </div>`).join('')
-      : emptyState('🏫', 'Belum ada ruang', 'Tambahkan ruang menggunakan form di atas.');
-  }
-
-  function renderSelects() {
-    const currentLecturer = els.lecturerSelect.value;
-    const currentRoom = els.roomSelect.value;
-
-    els.lecturerSelect.innerHTML = `<option value="">${data.lecturers.length ? 'Pilih dosen' : 'Tambahkan dosen terlebih dahulu'}</option>` +
-      data.lecturers.slice().sort((a,b) => a.name.localeCompare(b.name, 'id')).map((l) => `<option value="${l.id}">${escapeHtml(l.name)}${l.code ? ` — ${escapeHtml(l.code)}` : ''}</option>`).join('');
-    els.roomSelect.innerHTML = `<option value="">${data.rooms.length ? 'Pilih ruang' : 'Tambahkan ruang terlebih dahulu'}</option>` +
-      data.rooms.slice().sort((a,b) => a.name.localeCompare(b.name, 'id')).map((r) => `<option value="${r.id}">${escapeHtml(r.name)}</option>`).join('');
-
-    if (data.lecturers.some((l) => l.id === currentLecturer)) els.lecturerSelect.value = currentLecturer;
-    if (data.rooms.some((r) => r.id === currentRoom)) els.roomSelect.value = currentRoom;
-  }
-
-  function emptyState(emoji, title, detail) {
-    return `<div class="empty-state"><span class="emoji">${emoji}</span><strong>${title}</strong><div>${detail}</div></div>`;
-  }
-
-  function getLecturer(id) { return data.lecturers.find((l) => l.id === id); }
-  function getRoom(id) { return data.rooms.find((r) => r.id === id); }
-
-  function scheduleSort(a, b) {
-    const dayDiff = DAYS.indexOf(a.day) - DAYS.indexOf(b.day);
-    return dayDiff || a.startTime.localeCompare(b.startTime) || a.courseName.localeCompare(b.courseName, 'id');
-  }
-
-  function renderSchedules() {
-    const filter = els.filterDay.value || 'Semua';
-    const schedules = data.schedules.slice().sort(scheduleSort).filter((s) => filter === 'Semua' || s.day === filter);
-
-    els.scheduleList.innerHTML = schedules.length ? schedules.map((s) => {
-      const lecturer = getLecturer(s.lecturerId);
-      const room = getRoom(s.roomId);
+    els.lecturerList.innerHTML = lecturers.map((lecturer) => {
+      const count = data.schedules.filter((schedule) => schedule.lecturerIds.includes(lecturer.id)).length;
       return `
-        <article class="schedule-item">
+        <div class="master-item">
           <div>
-            <div><span class="badge">${escapeHtml(s.day)}</span></div>
-            <h3 class="schedule-title">${escapeHtml(s.courseName)} — ${escapeHtml(s.className)}</h3>
-            <div class="schedule-meta">
-              <span>🕒 ${escapeHtml(s.startTime)}–${escapeHtml(s.endTime)}</span>
-              <span>👨‍🏫 ${escapeHtml(lecturer?.name || 'Dosen terhapus')}</span>
-              <span>🏫 ${escapeHtml(room?.name || 'Ruang terhapus')}</span>
-            </div>
-            ${s.notes ? `<div class="schedule-notes">📝 ${escapeHtml(s.notes)}</div>` : ''}
+            <div class="master-item-name">${escapeHtml(lecturer.name)}</div>
+            <small>${escapeHtml(lecturer.code || 'NIDN/Kode belum diisi')} • ${count} jadwal</small>
           </div>
-          <div class="schedule-actions">
-            <button type="button" class="icon-btn" data-edit-schedule="${s.id}" title="Edit jadwal">✏️</button>
-            <button type="button" class="icon-btn danger" data-delete-schedule="${s.id}" title="Hapus jadwal">🗑️</button>
+          <div class="master-actions">
+            <button class="icon-btn" type="button" data-detail-lecturer="${escapeHtml(lecturer.id)}">Detail</button>
+            <button class="icon-btn danger" type="button" data-remove-lecturer="${escapeHtml(lecturer.id)}">Hapus</button>
           </div>
-        </article>`;
-    }).join('') : emptyState('📭', 'Belum ada jadwal', filter === 'Semua' ? 'Buat jadwal pertama menggunakan form di sebelah kiri/atas.' : `Belum ada jadwal pada hari ${filter}.`);
-  }
-
-  function renderWeeklyPlot() {
-    els.weeklyPlot.innerHTML = DAYS.map((day) => {
-      const daySchedules = data.schedules.filter((s) => s.day === day).sort(scheduleSort);
-      return `
-        <section class="day-column">
-          <div class="day-heading"><strong>${day}</strong><span class="day-count">${daySchedules.length} jadwal</span></div>
-          ${daySchedules.length ? daySchedules.map((s) => {
-            const lecturer = getLecturer(s.lecturerId);
-            const room = getRoom(s.roomId);
-            return `<div class="plot-item">
-              <div class="plot-time">${escapeHtml(s.startTime)}–${escapeHtml(s.endTime)}</div>
-              <div class="plot-course">${escapeHtml(s.courseName)}</div>
-              <div class="plot-detail">${escapeHtml(s.className)}</div>
-              <div class="plot-detail">👨‍🏫 ${escapeHtml(lecturer?.name || '-')}</div>
-              <div class="plot-detail">🏫 ${escapeHtml(room?.name || '-')}</div>
-            </div>`;
-          }).join('') : `<div class="empty-state" style="padding:16px 8px"><span class="emoji">—</span><div>Belum ada jadwal</div></div>`}
-        </section>`;
+        </div>`;
     }).join('');
-  }
 
-  function toMinutes(time) {
-    const [h, m] = time.split(':').map(Number);
-    return h * 60 + m;
-  }
-
-  function overlaps(startA, endA, startB, endB) {
-    return toMinutes(startA) < toMinutes(endB) && toMinutes(startB) < toMinutes(endA);
-  }
-
-  function findConflicts(candidate, ignoreId = '') {
-    return data.schedules.filter((existing) => {
-      if (existing.id === ignoreId || existing.day !== candidate.day) return false;
-      if (!overlaps(candidate.startTime, candidate.endTime, existing.startTime, existing.endTime)) return false;
-      return existing.lecturerId === candidate.lecturerId || existing.roomId === candidate.roomId;
-    }).map((existing) => {
-      const lecturerConflict = existing.lecturerId === candidate.lecturerId;
-      const roomConflict = existing.roomId === candidate.roomId;
-      const reasons = [];
-      if (lecturerConflict) reasons.push(`dosen ${getLecturer(existing.lecturerId)?.name || ''}`.trim());
-      if (roomConflict) reasons.push(`ruang ${getRoom(existing.roomId)?.name || ''}`.trim());
-      return { existing, reasons };
+    els.lecturerList.querySelectorAll('[data-remove-lecturer]').forEach((button) => {
+      button.addEventListener('click', () => removeLecturer(button.dataset.removeLecturer));
+    });
+    els.lecturerList.querySelectorAll('[data-detail-lecturer]').forEach((button) => {
+      button.addEventListener('click', () => {
+        activateTab('lecturer-detail');
+        els.detailLecturerSelect.value = button.dataset.detailLecturer;
+        renderLecturerDetail();
+      });
     });
   }
 
-  function showConflicts(conflicts) {
-    if (!conflicts.length) {
-      els.conflictBox.classList.add('hidden');
-      els.conflictBox.innerHTML = '';
+  function renderRoomList() {
+    const rooms = sortRooms(data.rooms);
+    if (!rooms.length) {
+      els.roomList.innerHTML = '<div class="empty-state"><strong>Belum ada ruang.</strong>Tambahkan ruang sebelum membuat jadwal.</div>';
       return;
     }
-    els.conflictBox.innerHTML = `<strong>⚠️ Jadwal bentrok dan tidak dapat disimpan.</strong><br>` + conflicts.map(({ existing, reasons }) =>
-      `• ${escapeHtml(existing.day)} ${escapeHtml(existing.startTime)}–${escapeHtml(existing.endTime)} (${escapeHtml(existing.courseName)}): ${escapeHtml(reasons.join(' dan '))} sudah digunakan.`
-    ).join('<br>');
-    els.conflictBox.classList.remove('hidden');
+
+    els.roomList.innerHTML = rooms.map((room) => {
+      const count = data.schedules.filter((schedule) => schedule.roomId === room.id).length;
+      return `
+        <div class="master-item">
+          <div>
+            <div class="master-item-name">${escapeHtml(room.name)}</div>
+            <small>${room.capacity ? `Kapasitas ${escapeHtml(room.capacity)} • ` : ''}${count} jadwal</small>
+          </div>
+          <button class="icon-btn danger" type="button" data-remove-room="${escapeHtml(room.id)}">Hapus</button>
+        </div>`;
+    }).join('');
+
+    els.roomList.querySelectorAll('[data-remove-room]').forEach((button) => {
+      button.addEventListener('click', () => removeRoom(button.dataset.removeRoom));
+    });
   }
 
-  function resetScheduleForm() {
-    els.scheduleForm.reset();
-    els.scheduleId.value = '';
-    els.btnSaveSchedule.textContent = '➕ Simpan Jadwal';
-    els.btnCancelEdit.classList.add('hidden');
-    els.scheduleFormTitle.textContent = 'Tambah Jadwal Kuliah';
-    showConflicts([]);
+  function renderRoomOptions() {
+    const current = els.roomSelect.value;
+    const rooms = sortRooms(data.rooms);
+    els.roomSelect.innerHTML = '<option value="">Pilih ruang</option>' + rooms.map((room) => `<option value="${escapeHtml(room.id)}">${escapeHtml(room.name)}</option>`).join('');
+    if (rooms.some((room) => room.id === current)) els.roomSelect.value = current;
   }
 
-  function validateSchedule(candidate, ignoreId = '') {
-    if (!candidate.courseName || !candidate.className || !candidate.lecturerId || !candidate.roomId || !candidate.day || !candidate.startTime || !candidate.endTime) {
-      showToast('Lengkapi semua data wajib.', 'error');
-      return false;
+  function renderSessionOptions(preserve = false) {
+    const day = els.daySelect.value;
+    const current = preserve ? els.sessionSelect.value : '';
+    if (!day || !SESSIONS[day]) {
+      els.sessionSelect.disabled = true;
+      els.sessionSelect.innerHTML = '<option value="">Pilih hari terlebih dahulu</option>';
+      return;
     }
-    if (toMinutes(candidate.endTime) <= toMinutes(candidate.startTime)) {
-      showToast('Jam selesai harus lebih besar dari jam mulai.', 'error');
-      return false;
+
+    els.sessionSelect.disabled = false;
+    els.sessionSelect.innerHTML = '<option value="">Pilih sesi</option>' + SESSIONS[day]
+      .map((session, index) => `<option value="${session.id}">Sesi ${index + 1} • ${displayTime(session.start, session.end)}</option>`)
+      .join('');
+    if (current && sessionById(day, current)) els.sessionSelect.value = current;
+  }
+
+  function renderLecturerChoices(forceSelectedIds = null) {
+    if (forceSelectedIds !== null) draftLecturerIds = new Set(forceSelectedIds);
+    const selected = draftLecturerIds;
+    const search = normalizeText(els.lecturerSearch.value).toLocaleLowerCase('id');
+    const lecturers = sortLecturers(data.lecturers).filter((lecturer) => {
+      return !search || lecturer.name.toLocaleLowerCase('id').includes(search) || lecturer.code.toLocaleLowerCase('id').includes(search);
+    });
+
+    if (!data.lecturers.length) {
+      els.lecturerChoices.innerHTML = '<div class="empty-state"><strong>Data dosen masih kosong.</strong>Tambahkan dosen pada menu Data Dosen & Ruang.</div>';
+      return;
     }
-    const conflicts = findConflicts(candidate, ignoreId);
-    showConflicts(conflicts);
-    if (conflicts.length) {
-      showToast('Jadwal bentrok. Periksa pesan berwarna merah.', 'error');
-      return false;
+    if (!lecturers.length) {
+      els.lecturerChoices.innerHTML = '<div class="empty-state">Nama dosen tidak ditemukan.</div>';
+      return;
     }
-    return true;
+
+    els.lecturerChoices.innerHTML = lecturers.map((lecturer) => `
+      <label class="lecturer-choice">
+        <input type="checkbox" name="lecturerIds" value="${escapeHtml(lecturer.id)}" ${selected.has(lecturer.id) ? 'checked' : ''} />
+        <span>${escapeHtml(lecturer.name)}<small>${escapeHtml(lecturer.code || 'Tanpa NIDN/Kode')}</small></span>
+      </label>`).join('');
+  }
+
+  function scheduleSortValue(schedule) {
+    const dayOrder = schedule.day === 'Jumat' ? 0 : 1;
+    const session = sessionById(schedule.day, schedule.sessionId);
+    return dayOrder * 10000 + (session ? timeToMinutes(session.start) : 9999);
+  }
+
+  function renderScheduleList() {
+    const filter = els.filterDay.value || 'Semua';
+    const list = [...data.schedules]
+      .filter((schedule) => filter === 'Semua' || schedule.day === filter)
+      .sort((a, b) => scheduleSortValue(a) - scheduleSortValue(b) || a.courseName.localeCompare(b.courseName, 'id'));
+
+    if (!list.length) {
+      els.scheduleList.innerHTML = '<div class="empty-state"><strong>Belum ada jadwal pada pilihan ini.</strong>Isi formulir di sebelah kiri untuk mulai membuat plotting.</div>';
+      return;
+    }
+
+    els.scheduleList.innerHTML = list.map((schedule) => {
+      const session = sessionById(schedule.day, schedule.sessionId);
+      const room = data.rooms.find((item) => item.id === schedule.roomId);
+      const lecturers = schedule.lecturerIds.map((id) => data.lecturers.find((item) => item.id === id)?.name).filter(Boolean);
+      return `
+        <article class="schedule-item">
+          <div>
+            <h3 class="schedule-title">${escapeHtml(schedule.courseName)}</h3>
+            <div class="schedule-subtitle">${escapeHtml(schedule.programStudy)} • Angkatan ${escapeHtml(schedule.cohort)}</div>
+            <div class="schedule-meta">
+              <span class="meta-pill primary">${escapeHtml(schedule.day)}</span>
+              <span class="meta-pill">${session ? escapeHtml(displayTime(session.start, session.end)) : '-'}</span>
+              <span class="meta-pill">${escapeHtml(room?.name || 'Ruang tidak ditemukan')}</span>
+            </div>
+            <div class="lecturer-line"><b>Dosen:</b> ${lecturers.length ? lecturers.map(escapeHtml).join('; ') : 'Dosen tidak ditemukan'}</div>
+            ${schedule.notes ? `<div class="schedule-notes">Catatan: ${escapeHtml(schedule.notes)}</div>` : ''}
+          </div>
+          <div class="schedule-actions">
+            <button class="icon-btn" type="button" data-edit-schedule="${escapeHtml(schedule.id)}">Edit</button>
+            <button class="icon-btn danger" type="button" data-remove-schedule="${escapeHtml(schedule.id)}">Hapus</button>
+          </div>
+        </article>`;
+    }).join('');
+
+    els.scheduleList.querySelectorAll('[data-edit-schedule]').forEach((button) => {
+      button.addEventListener('click', () => editSchedule(button.dataset.editSchedule));
+    });
+    els.scheduleList.querySelectorAll('[data-remove-schedule]').forEach((button) => {
+      button.addEventListener('click', () => removeSchedule(button.dataset.removeSchedule));
+    });
+  }
+
+  function renderDetailLecturerOptions() {
+    const current = els.detailLecturerSelect.value;
+    const lecturers = sortLecturers(data.lecturers);
+    els.detailLecturerSelect.innerHTML = lecturers.length
+      ? lecturers.map((lecturer) => `<option value="${escapeHtml(lecturer.id)}">${escapeHtml(lecturer.name)}</option>`).join('')
+      : '<option value="">Belum ada dosen</option>';
+
+    if (lecturers.some((lecturer) => lecturer.id === current)) {
+      els.detailLecturerSelect.value = current;
+    }
+  }
+
+  function renderLecturerDetail() {
+    const lecturerId = els.detailLecturerSelect.value;
+    const lecturer = data.lecturers.find((item) => item.id === lecturerId);
+    if (!lecturer) {
+      els.lecturerDetailSummary.innerHTML = '';
+      els.lecturerDetailList.innerHTML = '<div class="empty-state"><strong>Belum ada data dosen.</strong>Tambahkan dosen terlebih dahulu pada menu Data Dosen & Ruang.</div>';
+      return;
+    }
+
+    const schedules = data.schedules
+      .filter((schedule) => schedule.lecturerIds.includes(lecturerId))
+      .sort((a, b) => scheduleSortValue(a) - scheduleSortValue(b));
+    const courses = new Set(schedules.map((schedule) => schedule.courseName.toLocaleLowerCase('id'))).size;
+    const programs = new Set(schedules.map((schedule) => schedule.programStudy.toLocaleLowerCase('id'))).size;
+
+    els.lecturerDetailSummary.innerHTML = `
+      <div class="summary-box"><span>Total Jadwal</span><strong>${schedules.length}</strong></div>
+      <div class="summary-box"><span>Mata Kuliah</span><strong>${courses}</strong></div>
+      <div class="summary-box"><span>Program Studi</span><strong>${programs}</strong></div>`;
+
+    if (!schedules.length) {
+      els.lecturerDetailList.innerHTML = `<div class="empty-state"><strong>${escapeHtml(lecturer.name)} belum memiliki jadwal.</strong>Jadwal yang melibatkan dosen ini akan tampil di sini.</div>`;
+      return;
+    }
+
+    els.lecturerDetailList.innerHTML = schedules.map((schedule) => {
+      const session = sessionById(schedule.day, schedule.sessionId);
+      const room = data.rooms.find((item) => item.id === schedule.roomId);
+      return `
+        <div class="detail-item">
+          <div class="detail-item-top">
+            <div>
+              <div class="detail-course">${escapeHtml(schedule.courseName)}</div>
+              <div class="detail-program">${escapeHtml(schedule.programStudy)} • Angkatan ${escapeHtml(schedule.cohort)}</div>
+            </div>
+            <span class="meta-pill primary">${escapeHtml(schedule.day)}</span>
+          </div>
+          <div class="detail-meta">
+            <span class="meta-pill">${session ? escapeHtml(displayTime(session.start, session.end)) : '-'}</span>
+            <span class="meta-pill">${escapeHtml(room?.name || 'Ruang tidak ditemukan')}</span>
+          </div>
+        </div>`;
+    }).join('');
+  }
+
+  function renderPlot() {
+    const rooms = sortRooms(data.rooms);
+    if (!rooms.length) {
+      els.plotTables.innerHTML = '<div class="empty-state"><strong>Belum ada data ruang.</strong>Tambahkan minimal satu ruang untuk menampilkan plot.</div>';
+      return;
+    }
+
+    els.plotTables.innerHTML = ['Jumat', 'Sabtu'].map((day) => buildPlotTable(day, rooms)).join('');
+  }
+
+  function buildPlotTable(day, rooms) {
+    const header = rooms.map((room) => `<th>${escapeHtml(room.name)}</th>`).join('');
+    const rows = [];
+
+    SESSIONS[day].forEach((session, index) => {
+      if (day === 'Sabtu' && index === 5) {
+        rows.push(`<tr class="break-row"><td colspan="${rooms.length + 1}">ISTIRAHAT 18.10 – 18.30</td></tr>`);
+      }
+
+      const cells = rooms.map((room) => {
+        const schedules = data.schedules.filter((schedule) => schedule.day === day && schedule.sessionId === session.id && schedule.roomId === room.id);
+        if (!schedules.length) return '<td></td>';
+        return `<td class="occupied">${schedules.map((schedule) => buildPlotEntry(schedule)).join('')}</td>`;
+      }).join('');
+
+      rows.push(`<tr><td class="time-col">${escapeHtml(displayTime(session.start, session.end))}</td>${cells}</tr>`);
+    });
+
+    return `
+      <section class="plot-section">
+        <div class="plot-section-title">
+          <h3>${day.toUpperCase()}</h3>
+          <span>${SESSIONS[day].length} sesi perkuliahan</span>
+        </div>
+        <div class="table-scroll">
+          <table class="plot-table">
+            <thead><tr><th class="time-col">${day.toUpperCase()}</th>${header}</tr></thead>
+            <tbody>${rows.join('')}</tbody>
+          </table>
+        </div>
+      </section>`;
+  }
+
+  function buildPlotEntry(schedule) {
+    const lecturers = schedule.lecturerIds
+      .map((id) => data.lecturers.find((item) => item.id === id)?.name)
+      .filter(Boolean);
+    return `
+      <div class="plot-entry">
+        <div class="plot-course">${escapeHtml(schedule.courseName)}</div>
+        <div class="plot-class">${escapeHtml(schedule.programStudy)} • Angkatan ${escapeHtml(schedule.cohort)}</div>
+        <div class="plot-lecturers">${lecturers.map((name, index) => `${index + 1}. ${escapeHtml(name)}`).join('<br>')}</div>
+      </div>`;
   }
 
   function exportData() {
-    const payload = { app: 'Plotting Jadwal Perkuliahan', version: 1, exportedAt: new Date().toISOString(), ...data };
+    const payload = {
+      app: 'Plotting Jadwal Jumat Sabtu',
+      version: DATA_VERSION,
+      exportedAt: new Date().toISOString(),
+      data
+    };
     const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
-    const date = new Date().toISOString().slice(0, 10);
+    const now = new Date();
+    const stamp = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
     a.href = url;
-    a.download = `backup-jadwal-kuliah-${date}.json`;
+    a.download = `backup-jadwal-${stamp}.json`;
     document.body.appendChild(a);
     a.click();
     a.remove();
     URL.revokeObjectURL(url);
-    showToast('Backup berhasil diunduh.');
+    showToast('Backup data berhasil diunduh.', 'success');
   }
 
-  document.querySelectorAll('.tab').forEach((tab) => tab.addEventListener('click', () => switchTab(tab.dataset.tab)));
-
-  els.lecturerForm.addEventListener('submit', (e) => {
-    e.preventDefault();
-    const name = els.lecturerName.value.trim();
-    const code = els.lecturerCode.value.trim();
-    if (!name) return;
-    if (data.lecturers.some((l) => l.name.toLowerCase() === name.toLowerCase())) {
-      showToast('Nama dosen sudah ada.', 'error'); return;
-    }
-    if (code && data.lecturers.some((l) => (l.code || '').toLowerCase() === code.toLowerCase())) {
-      showToast('NIDN/kode dosen sudah digunakan.', 'error'); return;
-    }
-    data.lecturers.push({ id: uid('dos'), name, code });
-    els.lecturerForm.reset();
-    saveData();
-    showToast('Dosen berhasil ditambahkan.');
-  });
-
-  els.roomForm.addEventListener('submit', (e) => {
-    e.preventDefault();
-    const name = els.roomName.value.trim();
-    const capacity = els.roomCapacity.value.trim();
-    if (!name) return;
-    if (data.rooms.some((r) => r.name.toLowerCase() === name.toLowerCase())) {
-      showToast('Nama ruang sudah ada.', 'error'); return;
-    }
-    data.rooms.push({ id: uid('rng'), name, capacity });
-    els.roomForm.reset();
-    saveData();
-    showToast('Ruang berhasil ditambahkan.');
-  });
-
-  els.lecturerList.addEventListener('click', (e) => {
-    const btn = e.target.closest('[data-delete-lecturer]'); if (!btn) return;
-    const id = btn.dataset.deleteLecturer;
-    if (data.schedules.some((s) => s.lecturerId === id)) {
-      showToast('Dosen tidak dapat dihapus karena masih dipakai pada jadwal.', 'error'); return;
-    }
-    if (!confirm('Hapus dosen ini?')) return;
-    data.lecturers = data.lecturers.filter((l) => l.id !== id);
-    saveData(); showToast('Dosen dihapus.');
-  });
-
-  els.roomList.addEventListener('click', (e) => {
-    const btn = e.target.closest('[data-delete-room]'); if (!btn) return;
-    const id = btn.dataset.deleteRoom;
-    if (data.schedules.some((s) => s.roomId === id)) {
-      showToast('Ruang tidak dapat dihapus karena masih dipakai pada jadwal.', 'error'); return;
-    }
-    if (!confirm('Hapus ruang ini?')) return;
-    data.rooms = data.rooms.filter((r) => r.id !== id);
-    saveData(); showToast('Ruang dihapus.');
-  });
-
-  els.scheduleForm.addEventListener('submit', (e) => {
-    e.preventDefault();
-    if (!data.lecturers.length || !data.rooms.length) {
-      showToast('Tambahkan minimal satu dosen dan satu ruang terlebih dahulu.', 'error');
-      switchTab('master'); return;
-    }
-    const id = els.scheduleId.value;
-    const candidate = {
-      id: id || uid('jdw'), courseName: els.courseName.value.trim(), className: els.className.value.trim(),
-      lecturerId: els.lecturerSelect.value, roomId: els.roomSelect.value, day: els.daySelect.value,
-      startTime: els.startTime.value, endTime: els.endTime.value, notes: els.notes.value.trim()
-    };
-    if (!validateSchedule(candidate, id)) return;
-    if (id) {
-      data.schedules = data.schedules.map((s) => s.id === id ? candidate : s);
-      showToast('Jadwal berhasil diperbarui.');
-    } else {
-      data.schedules.push(candidate);
-      showToast('Jadwal berhasil disimpan.');
-    }
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
-    resetScheduleForm();
-    renderAll();
-  });
-
-  ['change', 'input'].forEach((eventName) => {
-    [els.daySelect, els.startTime, els.endTime, els.lecturerSelect, els.roomSelect].forEach((el) => el.addEventListener(eventName, () => {
-      if (!els.daySelect.value || !els.startTime.value || !els.endTime.value || !els.lecturerSelect.value || !els.roomSelect.value) return showConflicts([]);
-      const candidate = { day: els.daySelect.value, startTime: els.startTime.value, endTime: els.endTime.value, lecturerId: els.lecturerSelect.value, roomId: els.roomSelect.value };
-      if (toMinutes(candidate.endTime) > toMinutes(candidate.startTime)) showConflicts(findConflicts(candidate, els.scheduleId.value));
-    }));
-  });
-
-  els.scheduleList.addEventListener('click', (e) => {
-    const edit = e.target.closest('[data-edit-schedule]');
-    const del = e.target.closest('[data-delete-schedule]');
-    if (edit) {
-      const s = data.schedules.find((x) => x.id === edit.dataset.editSchedule); if (!s) return;
-      els.scheduleId.value = s.id; els.courseName.value = s.courseName; els.className.value = s.className;
-      els.lecturerSelect.value = s.lecturerId; els.roomSelect.value = s.roomId; els.daySelect.value = s.day;
-      els.startTime.value = s.startTime; els.endTime.value = s.endTime; els.notes.value = s.notes || '';
-      els.btnSaveSchedule.textContent = '💾 Simpan Perubahan';
-      els.btnCancelEdit.classList.remove('hidden');
-      els.scheduleFormTitle.textContent = 'Edit Jadwal Kuliah';
-      showConflicts([]); window.scrollTo({ top: 0, behavior: 'smooth' });
-    }
-    if (del) {
-      const s = data.schedules.find((x) => x.id === del.dataset.deleteSchedule); if (!s) return;
-      if (!confirm(`Hapus jadwal ${s.courseName} (${s.className})?`)) return;
-      data.schedules = data.schedules.filter((x) => x.id !== s.id);
-      if (els.scheduleId.value === s.id) resetScheduleForm();
-      saveData(); showToast('Jadwal dihapus.');
-    }
-  });
-
-  els.btnCancelEdit.addEventListener('click', resetScheduleForm);
-  els.filterDay.addEventListener('change', renderSchedules);
-  els.btnPrint.addEventListener('click', () => { switchTab('plot'); setTimeout(() => window.print(), 100); });
-  els.btnPrintPlot.addEventListener('click', () => window.print());
-  els.btnExport.addEventListener('click', exportData);
-  els.btnExportLarge.addEventListener('click', exportData);
-
-  els.importFile.addEventListener('change', async () => {
-    const file = els.importFile.files?.[0]; if (!file) return;
+  async function importData(event) {
+    const file = event.target.files?.[0];
+    if (!file) return;
     try {
       const parsed = JSON.parse(await file.text());
-      const normalized = normalizeData(parsed);
-      const valid = normalized.lecturers.every((x) => x.id && x.name) && normalized.rooms.every((x) => x.id && x.name) &&
-        normalized.schedules.every((x) => x.id && x.courseName && x.className && x.lecturerId && x.roomId && DAYS.includes(x.day) && x.startTime && x.endTime);
-      if (!valid) throw new Error('Format tidak valid');
-      if (!confirm('Impor backup akan mengganti seluruh data yang sekarang. Lanjutkan?')) { els.importFile.value = ''; return; }
-      data = normalized; saveData(); resetScheduleForm(); els.importFile.value = ''; showToast('Backup berhasil dipulihkan.');
-    } catch (_) {
-      els.importFile.value = ''; showToast('File backup tidak valid atau rusak.', 'error');
+      const candidate = parsed?.data || parsed;
+      if (!candidate || !Array.isArray(candidate.lecturers) || !Array.isArray(candidate.rooms) || !Array.isArray(candidate.schedules)) {
+        throw new Error('Format file tidak dikenali.');
+      }
+      const ok = await askConfirm('Impor Backup', 'Data saat ini akan diganti dengan isi file backup. Lanjutkan?');
+      if (!ok) return;
+      data = sanitizeData(candidate);
+      saveData();
+      resetScheduleForm();
+      renderAll();
+      showToast('Backup berhasil dipulihkan.', 'success');
+    } catch (error) {
+      console.error(error);
+      showToast('File backup tidak valid atau tidak dapat dibaca.', 'error');
+    } finally {
+      event.target.value = '';
     }
-  });
+  }
 
-  els.btnReset.addEventListener('click', () => {
-    if (!confirm('PERINGATAN: Semua data dosen, ruang, dan jadwal akan dihapus dari browser ini. Lanjutkan?')) return;
-    data = emptyData(); localStorage.removeItem(STORAGE_KEY); resetScheduleForm(); renderAll(); showToast('Semua data telah dihapus.');
-  });
+  async function resetAllData() {
+    const ok = await askConfirm('Hapus Semua Data Jadwal', 'Semua jadwal akan dihapus. Data dosen dan ruang tetap dipertahankan. Lanjutkan?');
+    if (!ok) return;
+    data.schedules = [];
+    saveData();
+    resetScheduleForm();
+    renderAll();
+    showToast('Semua data jadwal berhasil dihapus.', 'success');
+  }
 
-  renderAll();
+  function printPlot() {
+    renderPlot();
+    activateTab('plot');
+    setTimeout(() => window.print(), 120);
+  }
+
+  function showToast(message, type = '') {
+    clearTimeout(toastTimer);
+    els.toast.textContent = message;
+    els.toast.className = `toast show ${type}`.trim();
+    toastTimer = setTimeout(() => { els.toast.className = 'toast'; }, 3200);
+  }
+
+  function askConfirm(title, message) {
+    els.confirmTitle.textContent = title;
+    els.confirmMessage.textContent = message;
+    els.confirmModal.classList.remove('hidden');
+    els.confirmOk.focus();
+    return new Promise((resolve) => { confirmResolver = resolve; });
+  }
+
+  function closeConfirm(result) {
+    els.confirmModal.classList.add('hidden');
+    if (confirmResolver) confirmResolver(result);
+    confirmResolver = null;
+  }
 })();
