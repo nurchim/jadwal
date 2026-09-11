@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <meta name="description" content="Aplikasi plotting jadwal perkuliahan Jumat dan Sabtu tanpa database." />
+  <meta name="description" content="Aplikasi plotting jadwal perkuliahan Jumat dan Sabtu dengan perhitungan SKS tanpa database." />
   <title>Plotting Jadwal Jumat & Sabtu</title>
   <link rel="stylesheet" href="styles.css" />
 </head>
@@ -55,7 +55,7 @@
           <div class="card-heading">
             <p class="step-label">INPUT JADWAL</p>
             <h2 id="scheduleFormTitle">Tambah Jadwal Perkuliahan</h2>
-            <p>Pilih hari dan sesi yang tersedia, lalu tentukan satu atau beberapa dosen pengampu.</p>
+            <p>Pilih hari, sesi mulai, lalu tentukan sesi selesai atau jumlah SKS. Ketentuan: 1 SKS = 50 menit = 1 sesi.</p>
           </div>
 
           <form id="scheduleForm" autocomplete="off">
@@ -72,7 +72,7 @@
               </label>
             </div>
 
-            <div class="form-grid three">
+            <div class="form-grid two">
               <label>
                 Angkatan <span class="required">*</span>
                 <input id="cohort" type="text" placeholder="Contoh: 2026" required maxlength="50" />
@@ -85,13 +85,29 @@
                   <option value="Sabtu">Sabtu</option>
                 </select>
               </label>
+            </div>
+
+            <div class="form-grid three">
               <label>
-                Sesi / Jam Mengajar <span class="required">*</span>
+                Sesi Mulai <span class="required">*</span>
                 <select id="sessionSelect" required disabled>
                   <option value="">Pilih hari terlebih dahulu</option>
                 </select>
               </label>
+              <label>
+                Sesi Selesai <span class="required">*</span>
+                <select id="endSessionSelect" required disabled>
+                  <option value="">Pilih sesi mulai terlebih dahulu</option>
+                </select>
+              </label>
+              <label>
+                Jumlah SKS <span class="required">*</span>
+                <select id="sksSelect" required disabled>
+                  <option value="">Pilih sesi mulai terlebih dahulu</option>
+                </select>
+              </label>
             </div>
+            <p class="field-help duration-help"><b>Aturan durasi:</b> 1 SKS = 50 menit = 1 sesi pada template. Anda dapat memilih <b>Sesi Selesai</b> atau <b>Jumlah SKS</b>; keduanya akan menyesuaikan otomatis.</p>
 
             <div class="form-grid one">
               <label>
@@ -102,7 +118,7 @@
 
             <fieldset class="lecturer-fieldset">
               <legend>Dosen Pengampu <span class="required">*</span></legend>
-              <p class="field-help">Satu sesi dapat diampu lebih dari satu dosen. Centang semua dosen yang mengajar bersama.</p>
+              <p class="field-help">Satu jadwal dapat diampu lebih dari satu dosen. Centang semua dosen yang mengajar bersama.</p>
               <div class="lecturer-toolbar">
                 <input id="lecturerSearch" type="search" placeholder="Cari nama dosen..." aria-label="Cari nama dosen" />
                 <button class="btn btn-small btn-secondary" id="btnClearLecturers" type="button">Kosongkan Pilihan</button>
