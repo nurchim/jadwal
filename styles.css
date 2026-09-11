@@ -412,3 +412,11 @@ textarea { resize: vertical; }
   .plot-section { break-inside: avoid; }
   .plot-tables { gap: 12px; }
 }
+
+.duration-help {
+  padding: 10px 12px;
+  border: 1px dashed var(--border);
+  border-radius: 10px;
+  background: var(--primary-soft);
+  line-height: 1.5;
+}
