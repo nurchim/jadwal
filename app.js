@@ -1,9 +1,10 @@
 (() => {
   'use strict';
 
-  const STORAGE_KEY = 'plottingJadwalJumatSabtu_v2';
-  const OLD_STORAGE_KEY = 'plottingJadwalKuliah_v1';
-  const DATA_VERSION = 2;
+  const STORAGE_KEY = 'plottingJadwalJumatSabtu_v3';
+  const PREVIOUS_STORAGE_KEY = 'plottingJadwalJumatSabtu_v2';
+  const LEGACY_STORAGE_KEY = 'plottingJadwalKuliah_v1';
+  const DATA_VERSION = 3;
 
   const SESSIONS = {
     Jumat: [
@@ -57,6 +58,8 @@
     cohort: $('cohort'),
     daySelect: $('daySelect'),
     sessionSelect: $('sessionSelect'),
+    endSessionSelect: $('endSessionSelect'),
+    sksSelect: $('sksSelect'),
     roomSelect: $('roomSelect'),
     lecturerChoices: $('lecturerChoices'),
     lecturerSearch: $('lecturerSearch'),
@@ -113,7 +116,18 @@
       renderSessionOptions();
       previewConflict();
     });
-    els.sessionSelect.addEventListener('change', previewConflict);
+    els.sessionSelect.addEventListener('change', () => {
+      renderDurationOptions();
+      previewConflict();
+    });
+    els.endSessionSelect.addEventListener('change', () => {
+      syncSksFromEndSession();
+      previewConflict();
+    });
+    els.sksSelect.addEventListener('change', () => {
+      syncEndSessionFromSks();
+      previewConflict();
+    });
     els.roomSelect.addEventListener('change', previewConflict);
     els.lecturerChoices.addEventListener('change', (event) => {
       const checkbox = event.target.closest('input[name="lecturerIds"]');
@@ -187,13 +201,35 @@
     return (SESSIONS[day] || []).find((session) => session.id === id) || null;
   }
 
+  function sessionIndex(day, id) {
+    return (SESSIONS[day] || []).findIndex((session) => session.id === id);
+  }
+
+  function sessionsForRange(day, startSessionId, endSessionId) {
+    const sessions = SESSIONS[day] || [];
+    const startIndex = sessionIndex(day, startSessionId);
+    const endIndex = sessionIndex(day, endSessionId);
+    if (startIndex < 0 || endIndex < startIndex) return [];
+    return sessions.slice(startIndex, endIndex + 1);
+  }
+
+  function scheduleSessions(schedule) {
+    return sessionsForRange(schedule.day, schedule.startSessionId, schedule.endSessionId);
+  }
+
+  function scheduleCoversSession(schedule, sessionId) {
+    return scheduleSessions(schedule).some((session) => session.id === sessionId);
+  }
+
+  function scheduleTimeLabel(schedule) {
+    const sessions = scheduleSessions(schedule);
+    if (!sessions.length) return '-';
+    return displayTime(sessions[0].start, sessions[sessions.length - 1].end);
+  }
+
   function timeToMinutes(time) {
     const [h, m] = String(time).split(':').map(Number);
     return h * 60 + m;
-  }
-
-  function sessionsOverlap(a, b) {
-    return timeToMinutes(a.start) < timeToMinutes(b.end) && timeToMinutes(b.start) < timeToMinutes(a.end);
   }
 
   function sortRooms(rooms) {
@@ -209,9 +245,16 @@
       const raw = localStorage.getItem(STORAGE_KEY);
       if (raw) return sanitizeData(JSON.parse(raw));
 
-      const oldRaw = localStorage.getItem(OLD_STORAGE_KEY);
-      if (oldRaw) {
-        const migrated = migrateOldData(JSON.parse(oldRaw));
+      const previousRaw = localStorage.getItem(PREVIOUS_STORAGE_KEY);
+      if (previousRaw) {
+        const migrated = sanitizeData(JSON.parse(previousRaw));
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(migrated));
+        return migrated;
+      }
+
+      const legacyRaw = localStorage.getItem(LEGACY_STORAGE_KEY);
+      if (legacyRaw) {
+        const migrated = migrateOldData(JSON.parse(legacyRaw));
         localStorage.setItem(STORAGE_KEY, JSON.stringify(migrated));
         return migrated;
       }
@@ -219,6 +262,41 @@
       console.warn('Gagal membaca data lokal:', error);
     }
     return emptyData();
+  }
+
+  function normalizeSchedule(item) {
+    const day = item.day;
+    const sessions = SESSIONS[day] || [];
+    const legacySessionId = item.sessionId || sessions.find((session) => session.start === item.startTime && session.end === item.endTime)?.id || '';
+    let startSessionId = String(item.startSessionId || legacySessionId || '');
+    let endSessionId = String(item.endSessionId || '');
+    let startIndex = sessionIndex(day, startSessionId);
+
+    if (startIndex < 0) return null;
+
+    if (sessionIndex(day, endSessionId) < startIndex) {
+      const requestedSks = Math.max(1, Number.parseInt(item.sks, 10) || 1);
+      const endIndexFromSks = Math.min(sessions.length - 1, startIndex + requestedSks - 1);
+      endSessionId = sessions[endIndexFromSks]?.id || startSessionId;
+    }
+
+    const range = sessionsForRange(day, startSessionId, endSessionId);
+    if (!range.length) return null;
+
+    return {
+      id: String(item.id),
+      courseName: normalizeText(item.courseName),
+      programStudy: normalizeText(item.programStudy || 'Belum diisi'),
+      cohort: normalizeText(item.cohort || item.className || 'Belum diisi'),
+      day,
+      startSessionId,
+      endSessionId,
+      sks: range.length,
+      roomId: String(item.roomId || ''),
+      lecturerIds: Array.isArray(item.lecturerIds) ? [...new Set(item.lecturerIds.map(String))] : (item.lecturerId ? [String(item.lecturerId)] : []),
+      notes: normalizeText(item.notes),
+      createdAt: item.createdAt || new Date().toISOString()
+    };
   }
 
   function sanitizeData(candidate) {
@@ -239,19 +317,8 @@
 
     safe.schedules = safe.schedules
       .filter((item) => item && item.id && (item.day === 'Jumat' || item.day === 'Sabtu'))
-      .map((item) => ({
-        id: String(item.id),
-        courseName: normalizeText(item.courseName),
-        programStudy: normalizeText(item.programStudy || 'Belum diisi'),
-        cohort: normalizeText(item.cohort || item.className || 'Belum diisi'),
-        day: item.day,
-        sessionId: String(item.sessionId || ((SESSIONS[item.day] || []).find((session) => session.start === item.startTime && session.end === item.endTime)?.id || '')),
-        roomId: String(item.roomId || ''),
-        lecturerIds: Array.isArray(item.lecturerIds) ? [...new Set(item.lecturerIds.map(String))] : (item.lecturerId ? [String(item.lecturerId)] : []),
-        notes: normalizeText(item.notes),
-        createdAt: item.createdAt || new Date().toISOString()
-      }))
-      .filter((item) => sessionById(item.day, item.sessionId));
+      .map(normalizeSchedule)
+      .filter(Boolean);
 
     return safe;
   }
@@ -267,7 +334,9 @@
         if (!matchingSession) return null;
         return {
           ...schedule,
-          sessionId: matchingSession.id,
+          startSessionId: matchingSession.id,
+          endSessionId: matchingSession.id,
+          sks: 1,
           lecturerIds: schedule.lecturerId ? [schedule.lecturerId] : [],
           programStudy: schedule.programStudy || 'Belum diisi',
           cohort: schedule.cohort || schedule.className || 'Belum diisi'
@@ -364,13 +433,16 @@
   }
 
   function getScheduleFormValue() {
+    const selectedSessions = sessionsForRange(els.daySelect.value, els.sessionSelect.value, els.endSessionSelect.value);
     return {
       id: els.scheduleId.value || uid('schedule'),
       courseName: normalizeText(els.courseName.value),
       programStudy: normalizeText(els.programStudy.value),
       cohort: normalizeText(els.cohort.value),
       day: els.daySelect.value,
-      sessionId: els.sessionSelect.value,
+      startSessionId: els.sessionSelect.value,
+      endSessionId: els.endSessionSelect.value,
+      sks: selectedSessions.length || Number.parseInt(els.sksSelect.value, 10) || 0,
       roomId: els.roomSelect.value,
       lecturerIds: getSelectedLecturerIds(),
       notes: normalizeText(els.notes.value),
@@ -384,26 +456,32 @@
     if (!candidate.programStudy) errors.push('Program studi wajib diisi.');
     if (!candidate.cohort) errors.push('Angkatan wajib diisi.');
     if (!['Jumat', 'Sabtu'].includes(candidate.day)) errors.push('Pilih hari Jumat atau Sabtu.');
-    const candidateSession = sessionById(candidate.day, candidate.sessionId);
-    if (!candidateSession) errors.push('Pilih sesi/jam mengajar yang tersedia.');
+
+    const candidateSessions = sessionsForRange(candidate.day, candidate.startSessionId, candidate.endSessionId);
+    if (!candidate.startSessionId || !sessionById(candidate.day, candidate.startSessionId)) errors.push('Pilih sesi mulai yang tersedia.');
+    if (!candidate.endSessionId || !sessionById(candidate.day, candidate.endSessionId)) errors.push('Pilih sesi selesai yang tersedia.');
+    if (candidate.startSessionId && candidate.endSessionId && !candidateSessions.length) errors.push('Sesi selesai harus sama dengan atau setelah sesi mulai.');
+    if (candidateSessions.length && candidate.sks !== candidateSessions.length) errors.push('Jumlah SKS harus sesuai dengan jumlah sesi. 1 SKS = 1 sesi = 50 menit.');
     if (!candidate.roomId || !data.rooms.some((room) => room.id === candidate.roomId)) errors.push('Pilih ruang yang tersedia.');
     if (!candidate.lecturerIds.length) errors.push('Pilih minimal satu dosen pengampu.');
     if (candidate.lecturerIds.some((id) => !data.lecturers.some((lecturer) => lecturer.id === id))) errors.push('Terdapat dosen yang sudah tidak tersedia.');
 
-    if (!candidateSession) return { errors, conflicts: [] };
+    if (!candidateSessions.length) return { errors, conflicts: [] };
 
+    const candidateSessionIds = new Set(candidateSessions.map((session) => session.id));
     const conflicts = [];
     for (const existing of data.schedules) {
       if (existing.id === ignoreId || existing.day !== candidate.day) continue;
-      const existingSession = sessionById(existing.day, existing.sessionId);
-      if (!existingSession || !sessionsOverlap(candidateSession, existingSession)) continue;
+      const existingSessions = scheduleSessions(existing);
+      const overlappingSessions = existingSessions.filter((session) => candidateSessionIds.has(session.id));
+      if (!overlappingSessions.length) continue;
 
       if (existing.roomId === candidate.roomId) {
-        conflicts.push({ type: 'room', schedule: existing, roomId: candidate.roomId });
+        conflicts.push({ type: 'room', schedule: existing, roomId: candidate.roomId, overlappingSessions });
       }
 
       const lecturerClashes = candidate.lecturerIds.filter((id) => existing.lecturerIds.includes(id));
-      lecturerClashes.forEach((lecturerId) => conflicts.push({ type: 'lecturer', schedule: existing, lecturerId }));
+      lecturerClashes.forEach((lecturerId) => conflicts.push({ type: 'lecturer', schedule: existing, lecturerId, overlappingSessions }));
     }
 
     return { errors, conflicts };
@@ -442,20 +520,19 @@
     const seen = new Set();
     validation.conflicts.forEach((conflict) => {
       const schedule = conflict.schedule;
-      const session = sessionById(schedule.day, schedule.sessionId);
-      if (!session) return;
+      const rangeText = `${scheduleTimeLabel(schedule)} (${schedule.sks} SKS)`;
       if (conflict.type === 'room') {
         const room = data.rooms.find((item) => item.id === conflict.roomId);
         const key = `room-${schedule.id}-${conflict.roomId}`;
         if (!seen.has(key)) {
-          lines.push(`<li><b>Bentrok ruang:</b> ${escapeHtml(room?.name || 'Ruang')} sudah dipakai oleh <b>${escapeHtml(schedule.courseName)}</b> pada ${escapeHtml(displayTime(session.start, session.end))}.</li>`);
+          lines.push(`<li><b>Bentrok ruang:</b> ${escapeHtml(room?.name || 'Ruang')} sudah dipakai oleh <b>${escapeHtml(schedule.courseName)}</b> pada ${escapeHtml(rangeText)}.</li>`);
           seen.add(key);
         }
       } else {
         const lecturer = data.lecturers.find((item) => item.id === conflict.lecturerId);
         const key = `lecturer-${schedule.id}-${conflict.lecturerId}`;
         if (!seen.has(key)) {
-          lines.push(`<li><b>Bentrok dosen:</b> ${escapeHtml(lecturer?.name || 'Dosen')} sudah mengajar <b>${escapeHtml(schedule.courseName)}</b> pada ${escapeHtml(displayTime(session.start, session.end))}.</li>`);
+          lines.push(`<li><b>Bentrok dosen:</b> ${escapeHtml(lecturer?.name || 'Dosen')} sudah mengajar <b>${escapeHtml(schedule.courseName)}</b> pada ${escapeHtml(rangeText)}.</li>`);
           seen.add(key);
         }
       }
@@ -472,7 +549,7 @@
   }
 
   function previewConflict() {
-    if (!els.daySelect.value || !els.sessionSelect.value) {
+    if (!els.daySelect.value || !els.sessionSelect.value || !els.endSessionSelect.value) {
       els.conflictBox.classList.add('hidden');
       return;
     }
@@ -492,7 +569,10 @@
     els.cohort.value = schedule.cohort;
     els.daySelect.value = schedule.day;
     renderSessionOptions();
-    els.sessionSelect.value = schedule.sessionId;
+    els.sessionSelect.value = schedule.startSessionId;
+    renderDurationOptions();
+    els.endSessionSelect.value = schedule.endSessionId;
+    els.sksSelect.value = String(schedule.sks);
     els.roomSelect.value = schedule.roomId;
     els.notes.value = schedule.notes || '';
     els.lecturerSearch.value = '';
@@ -549,7 +629,10 @@
     els.statLecturers.textContent = data.lecturers.length;
     els.statRooms.textContent = data.rooms.length;
     els.statSchedules.textContent = data.schedules.length;
-    const sessionKeys = new Set(data.schedules.map((item) => `${item.day}|${item.sessionId}`));
+    const sessionKeys = new Set();
+    data.schedules.forEach((schedule) => {
+      scheduleSessions(schedule).forEach((session) => sessionKeys.add(`${schedule.day}|${session.id}`));
+    });
     els.statFilledSessions.textContent = sessionKeys.size;
   }
 
@@ -620,18 +703,97 @@
 
   function renderSessionOptions(preserve = false) {
     const day = els.daySelect.value;
-    const current = preserve ? els.sessionSelect.value : '';
+    const currentStart = preserve ? els.sessionSelect.value : '';
+    const currentEnd = preserve ? els.endSessionSelect.value : '';
+    const currentSks = preserve ? els.sksSelect.value : '';
+
     if (!day || !SESSIONS[day]) {
       els.sessionSelect.disabled = true;
       els.sessionSelect.innerHTML = '<option value="">Pilih hari terlebih dahulu</option>';
+      resetDurationOptions();
       return;
     }
 
     els.sessionSelect.disabled = false;
-    els.sessionSelect.innerHTML = '<option value="">Pilih sesi</option>' + SESSIONS[day]
+    els.sessionSelect.innerHTML = '<option value="">Pilih sesi mulai</option>' + SESSIONS[day]
       .map((session, index) => `<option value="${session.id}">Sesi ${index + 1} • ${displayTime(session.start, session.end)}</option>`)
       .join('');
-    if (current && sessionById(day, current)) els.sessionSelect.value = current;
+
+    if (currentStart && sessionById(day, currentStart)) {
+      els.sessionSelect.value = currentStart;
+      renderDurationOptions(currentEnd, currentSks);
+    } else {
+      resetDurationOptions();
+    }
+  }
+
+  function resetDurationOptions() {
+    els.endSessionSelect.disabled = true;
+    els.endSessionSelect.innerHTML = '<option value="">Pilih sesi mulai terlebih dahulu</option>';
+    els.sksSelect.disabled = true;
+    els.sksSelect.innerHTML = '<option value="">Pilih sesi mulai terlebih dahulu</option>';
+  }
+
+  function renderDurationOptions(preferredEnd = '', preferredSks = '') {
+    const day = els.daySelect.value;
+    const startId = els.sessionSelect.value;
+    const sessions = SESSIONS[day] || [];
+    const startIndex = sessionIndex(day, startId);
+
+    if (startIndex < 0) {
+      resetDurationOptions();
+      return;
+    }
+
+    const available = sessions.slice(startIndex);
+    els.endSessionSelect.disabled = false;
+    els.sksSelect.disabled = false;
+
+    els.endSessionSelect.innerHTML = available.map((session, offset) => {
+      const sks = offset + 1;
+      return `<option value="${session.id}">Sesi ${startIndex + offset + 1} • selesai ${session.end.replace(':', '.')} • ${sks} SKS</option>`;
+    }).join('');
+
+    els.sksSelect.innerHTML = available.map((_, offset) => {
+      const sks = offset + 1;
+      return `<option value="${sks}">${sks} SKS • ${sks * 50} menit • ${sks} sesi</option>`;
+    }).join('');
+
+    const preferredEndIndex = sessionIndex(day, preferredEnd);
+    if (preferredEnd && preferredEndIndex >= startIndex) {
+      els.endSessionSelect.value = preferredEnd;
+      syncSksFromEndSession();
+      return;
+    }
+
+    const numericSks = Number.parseInt(preferredSks, 10);
+    if (numericSks >= 1 && numericSks <= available.length) {
+      els.sksSelect.value = String(numericSks);
+      syncEndSessionFromSks();
+      return;
+    }
+
+    els.endSessionSelect.value = startId;
+    els.sksSelect.value = '1';
+  }
+
+  function syncSksFromEndSession() {
+    const day = els.daySelect.value;
+    const startIndex = sessionIndex(day, els.sessionSelect.value);
+    const endIndex = sessionIndex(day, els.endSessionSelect.value);
+    if (startIndex < 0 || endIndex < startIndex) return;
+    els.sksSelect.value = String(endIndex - startIndex + 1);
+  }
+
+  function syncEndSessionFromSks() {
+    const day = els.daySelect.value;
+    const sessions = SESSIONS[day] || [];
+    const startIndex = sessionIndex(day, els.sessionSelect.value);
+    const sks = Number.parseInt(els.sksSelect.value, 10);
+    if (startIndex < 0 || !Number.isInteger(sks) || sks < 1) return;
+    const endIndex = startIndex + sks - 1;
+    if (!sessions[endIndex]) return;
+    els.endSessionSelect.value = sessions[endIndex].id;
   }
 
   function renderLecturerChoices(forceSelectedIds = null) {
@@ -660,7 +822,7 @@
 
   function scheduleSortValue(schedule) {
     const dayOrder = schedule.day === 'Jumat' ? 0 : 1;
-    const session = sessionById(schedule.day, schedule.sessionId);
+    const session = sessionById(schedule.day, schedule.startSessionId);
     return dayOrder * 10000 + (session ? timeToMinutes(session.start) : 9999);
   }
 
@@ -676,7 +838,6 @@
     }
 
     els.scheduleList.innerHTML = list.map((schedule) => {
-      const session = sessionById(schedule.day, schedule.sessionId);
       const room = data.rooms.find((item) => item.id === schedule.roomId);
       const lecturers = schedule.lecturerIds.map((id) => data.lecturers.find((item) => item.id === id)?.name).filter(Boolean);
       return `
@@ -686,7 +847,8 @@
             <div class="schedule-subtitle">${escapeHtml(schedule.programStudy)} • Angkatan ${escapeHtml(schedule.cohort)}</div>
             <div class="schedule-meta">
               <span class="meta-pill primary">${escapeHtml(schedule.day)}</span>
-              <span class="meta-pill">${session ? escapeHtml(displayTime(session.start, session.end)) : '-'}</span>
+              <span class="meta-pill">${escapeHtml(scheduleTimeLabel(schedule))}</span>
+              <span class="meta-pill">${schedule.sks} SKS • ${schedule.sks * 50} menit efektif</span>
               <span class="meta-pill">${escapeHtml(room?.name || 'Ruang tidak ditemukan')}</span>
             </div>
             <div class="lecturer-line"><b>Dosen:</b> ${lecturers.length ? lecturers.map(escapeHtml).join('; ') : 'Dosen tidak ditemukan'}</div>
@@ -745,7 +907,6 @@
     }
 
     els.lecturerDetailList.innerHTML = schedules.map((schedule) => {
-      const session = sessionById(schedule.day, schedule.sessionId);
       const room = data.rooms.find((item) => item.id === schedule.roomId);
       return `
         <div class="detail-item">
@@ -757,7 +918,8 @@
             <span class="meta-pill primary">${escapeHtml(schedule.day)}</span>
           </div>
           <div class="detail-meta">
-            <span class="meta-pill">${session ? escapeHtml(displayTime(session.start, session.end)) : '-'}</span>
+            <span class="meta-pill">${escapeHtml(scheduleTimeLabel(schedule))}</span>
+            <span class="meta-pill">${schedule.sks} SKS • ${schedule.sks * 50} menit efektif</span>
             <span class="meta-pill">${escapeHtml(room?.name || 'Ruang tidak ditemukan')}</span>
           </div>
         </div>`;
@@ -784,7 +946,7 @@
       }
 
       const cells = rooms.map((room) => {
-        const schedules = data.schedules.filter((schedule) => schedule.day === day && schedule.sessionId === session.id && schedule.roomId === room.id);
+        const schedules = data.schedules.filter((schedule) => schedule.day === day && scheduleCoversSession(schedule, session.id) && schedule.roomId === room.id);
         if (!schedules.length) return '<td></td>';
         return `<td class="occupied">${schedules.map((schedule) => buildPlotEntry(schedule)).join('')}</td>`;
       }).join('');
@@ -814,7 +976,7 @@
     return `
       <div class="plot-entry">
         <div class="plot-course">${escapeHtml(schedule.courseName)}</div>
-        <div class="plot-class">${escapeHtml(schedule.programStudy)} • Angkatan ${escapeHtml(schedule.cohort)}</div>
+        <div class="plot-class">${escapeHtml(schedule.programStudy)} • Angkatan ${escapeHtml(schedule.cohort)} • ${schedule.sks} SKS</div>
         <div class="plot-lecturers">${lecturers.map((name, index) => `${index + 1}. ${escapeHtml(name)}`).join('<br>')}</div>
       </div>`;
   }
