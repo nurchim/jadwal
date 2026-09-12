@@ -1,10 +1,10 @@
 (() => {
   'use strict';
 
-  const STORAGE_KEY = 'plottingJadwalJumatSabtu_v7';
-  const PREVIOUS_STORAGE_KEYS = ['plottingJadwalJumatSabtu_v6', 'plottingJadwalJumatSabtu_v5', 'plottingJadwalJumatSabtu_v4', 'plottingJadwalJumatSabtu_v3', 'plottingJadwalJumatSabtu_v2'];
+  const STORAGE_KEY = 'plottingJadwalJumatSabtu_v8';
+  const PREVIOUS_STORAGE_KEYS = ['plottingJadwalJumatSabtu_v7', 'plottingJadwalJumatSabtu_v6', 'plottingJadwalJumatSabtu_v5', 'plottingJadwalJumatSabtu_v4', 'plottingJadwalJumatSabtu_v3', 'plottingJadwalJumatSabtu_v2'];
   const LEGACY_STORAGE_KEY = 'plottingJadwalKuliah_v1';
-  const DATA_VERSION = 7;
+  const DATA_VERSION = 8;
 
   const PROGRAM_STUDIES = [
     'Magister Teknologi Informasi',
@@ -35,11 +35,15 @@
     ]
   };
 
-  const defaultRooms = () => Array.from({ length: 6 }, (_, i) => ({
-    id: uid('room'),
-    name: `Ruang ${i + 1}`,
-    capacity: ''
-  }));
+  const defaultRooms = () => [
+    ...Array.from({ length: 6 }, (_, i) => ({
+      id: uid('room'),
+      name: `Ruang ${i + 1}`,
+      capacity: '',
+      type: 'physical'
+    })),
+    { id: uid('room'), name: 'Online', capacity: '', type: 'online' }
+  ];
 
   const defaultPdfSettings = () => {
     const year = new Date().getFullYear();
@@ -66,7 +70,9 @@
     lecturerList: $('lecturerList'),
     roomForm: $('roomForm'),
     roomName: $('roomName'),
+    roomType: $('roomType'),
     roomCapacity: $('roomCapacity'),
+    roomCapacityField: $('roomCapacityField'),
     roomList: $('roomList'),
     scheduleForm: $('scheduleForm'),
     scheduleId: $('scheduleId'),
@@ -82,6 +88,8 @@
     sksInput: $('sksInput'),
     durationSummary: $('durationSummary'),
     roomSelect: $('roomSelect'),
+    meetingUrlField: $('meetingUrlField'),
+    meetingUrl: $('meetingUrl'),
     lecturerChoices: $('lecturerChoices'),
     lecturerOrder: $('lecturerOrder'),
     lecturerSearch: $('lecturerSearch'),
@@ -140,6 +148,7 @@
 
     els.lecturerForm.addEventListener('submit', onAddLecturer);
     els.roomForm.addEventListener('submit', onAddRoom);
+    els.roomType.addEventListener('change', updateRoomMasterForm);
     els.scheduleForm.addEventListener('submit', onSaveSchedule);
     els.daySelect.addEventListener('change', previewConflict);
     els.startTime.addEventListener('input', () => {
@@ -154,7 +163,11 @@
       syncEndTimeFromSks();
       previewConflict();
     });
-    els.roomSelect.addEventListener('change', previewConflict);
+    els.roomSelect.addEventListener('change', () => {
+      updateOnlineRoomUI();
+      previewConflict();
+    });
+    els.meetingUrl.addEventListener('input', previewConflict);
     els.lecturerChoices.addEventListener('change', (event) => {
       const checkbox = event.target.closest('input[name="lecturerIds"]');
       if (checkbox) {
@@ -227,6 +240,70 @@
 
   function normalizeText(value) {
     return String(value || '').trim().replace(/\s+/g, ' ');
+  }
+
+
+  function inferRoomType(room) {
+    if (room?.type === 'online') return 'online';
+    if (room?.type === 'physical') return 'physical';
+    const name = normalizeText(room?.name).toLocaleLowerCase('id');
+    return /online|gmeet|google meet|zoom|virtual/.test(name) ? 'online' : 'physical';
+  }
+
+  function getRoomById(roomId) {
+    return data.rooms.find((room) => room.id === roomId) || null;
+  }
+
+  function isOnlineRoom(roomOrId) {
+    const room = typeof roomOrId === 'string' ? getRoomById(roomOrId) : roomOrId;
+    return Boolean(room) && inferRoomType(room) === 'online';
+  }
+
+  function normalizeMeetingUrl(value) {
+    const raw = String(value || '').trim();
+    if (!raw) return '';
+    try {
+      const url = new URL(raw);
+      if (!['http:', 'https:'].includes(url.protocol)) return '';
+      url.hash = '';
+      return url.toString();
+    } catch {
+      return '';
+    }
+  }
+
+  function meetingUrlKey(value) {
+    const normalized = normalizeMeetingUrl(value);
+    if (!normalized) return '';
+    try {
+      const url = new URL(normalized);
+      let path = url.pathname.replace(/\/+$/, '') || '/';
+      return `${url.hostname.toLocaleLowerCase('en-US')}${path.toLocaleLowerCase('en-US')}`;
+    } catch {
+      return '';
+    }
+  }
+
+  function isSupportedMeetingUrl(value) {
+    const normalized = normalizeMeetingUrl(value);
+    if (!normalized) return false;
+    try {
+      const host = new URL(normalized).hostname.toLocaleLowerCase('en-US');
+      return host === 'meet.google.com' || host === 'zoom.us' || host.endsWith('.zoom.us');
+    } catch {
+      return false;
+    }
+  }
+
+  function meetingServiceLabel(value) {
+    const normalized = normalizeMeetingUrl(value);
+    if (!normalized) return 'Online';
+    try {
+      const host = new URL(normalized).hostname.toLocaleLowerCase('en-US');
+      if (host === 'meet.google.com') return 'Google Meet';
+      if (host === 'zoom.us' || host.endsWith('.zoom.us')) return 'Zoom';
+    } catch {}
+    return 'Online';
   }
 
   function escapeHtml(value) {
@@ -383,6 +460,7 @@
       endTime,
       sks,
       roomId: String(item.roomId || ''),
+      meetingUrl: normalizeText(item.meetingUrl || item.onlineUrl || ''),
       lecturerIds: Array.isArray(item.lecturerIds) ? [...new Set(item.lecturerIds.map(String))] : (item.lecturerId ? [String(item.lecturerId)] : []),
       notes: normalizeText(item.notes),
       createdAt: item.createdAt || new Date().toISOString()
@@ -404,12 +482,16 @@
 
     safe.rooms = safe.rooms
       .filter((item) => item && item.id && item.name)
-      .map((item) => ({ id: String(item.id), name: normalizeText(item.name), capacity: normalizeText(item.capacity) }));
+      .map((item) => ({ id: String(item.id), name: normalizeText(item.name), capacity: normalizeText(item.capacity), type: inferRoomType(item) }));
 
     safe.schedules = safe.schedules
       .filter((item) => item && item.id && (item.day === 'Jumat' || item.day === 'Sabtu'))
       .map(normalizeSchedule)
       .filter(Boolean);
+
+    if (Number(candidate?.version || 0) < 8 && !safe.rooms.some((room) => room.type === 'online')) {
+      safe.rooms.push({ id: uid('room'), name: 'Online', capacity: '', type: 'online' });
+    }
 
     const defaults = defaultPdfSettings();
     safe.pdfSettings = {
@@ -468,7 +550,8 @@
   function onAddRoom(event) {
     event.preventDefault();
     const name = normalizeText(els.roomName.value);
-    const capacity = normalizeText(els.roomCapacity.value);
+    const type = els.roomType.value === 'online' ? 'online' : 'physical';
+    const capacity = type === 'physical' ? normalizeText(els.roomCapacity.value) : '';
     if (!name) return;
 
     const duplicate = data.rooms.some((item) => item.name.toLocaleLowerCase('id') === name.toLocaleLowerCase('id'));
@@ -478,11 +561,30 @@
       return;
     }
 
-    data.rooms.push({ id: uid('room'), name, capacity });
+    data.rooms.push({ id: uid('room'), name, capacity, type });
     saveData();
     els.roomForm.reset();
+    els.roomType.value = 'physical';
+    updateRoomMasterForm();
     renderAll();
-    showToast('Ruang berhasil ditambahkan.', 'success');
+    showToast(type === 'online' ? 'Ruang online berhasil ditambahkan.' : 'Ruang fisik berhasil ditambahkan.', 'success');
+  }
+
+  function updateRoomMasterForm() {
+    const online = els.roomType.value === 'online';
+    els.roomCapacityField.classList.toggle('hidden', online);
+    els.roomCapacity.disabled = online;
+    if (online) els.roomCapacity.value = '';
+  }
+
+  function updateOnlineRoomUI() {
+    const room = getRoomById(els.roomSelect.value);
+    const online = isOnlineRoom(room);
+    els.meetingUrlField.classList.toggle('hidden', !online);
+    els.meetingUrl.required = online;
+    if (!online) {
+      els.meetingUrl.removeAttribute('aria-invalid');
+    }
   }
 
   async function removeLecturer(id) {
@@ -626,6 +728,7 @@
       endTime,
       sks,
       roomId: els.roomSelect.value,
+      meetingUrl: isOnlineRoom(els.roomSelect.value) ? normalizeText(els.meetingUrl.value) : '',
       lecturerIds: getSelectedLecturerIds(),
       notes: normalizeText(els.notes.value),
       createdAt: new Date().toISOString()
@@ -658,7 +761,13 @@
     else if (candidate.sks > 12) errors.push('Jumlah SKS maksimal 12 untuk satu jadwal.');
     if (duration > 0 && duration % 50 === 0 && candidate.sks !== duration / 50) errors.push(`Jumlah SKS harus ${duration / 50} karena durasi jadwal ${duration} menit.`);
 
-    if (!candidate.roomId || !data.rooms.some((room) => room.id === candidate.roomId)) errors.push('Pilih ruang yang tersedia.');
+    const candidateRoom = getRoomById(candidate.roomId);
+    if (!candidate.roomId || !candidateRoom) {
+      errors.push('Pilih ruang yang tersedia.');
+    } else if (isOnlineRoom(candidateRoom)) {
+      if (!candidate.meetingUrl) errors.push('Ruang online wajib memiliki link Google Meet atau Zoom.');
+      else if (!isSupportedMeetingUrl(candidate.meetingUrl)) errors.push('Masukkan URL Google Meet/Zoom yang valid, misalnya https://meet.google.com/... atau https://....zoom.us/j/....');
+    }
     if (!candidate.lecturerIds.length) errors.push('Pilih minimal satu dosen pengampu.');
     if (candidate.lecturerIds.some((id) => !data.lecturers.some((lecturer) => lecturer.id === id))) errors.push('Terdapat dosen yang sudah tidak tersedia.');
 
@@ -669,8 +778,17 @@
     for (const existing of data.schedules) {
       if (existing.id === ignoreId || existing.day !== candidate.day || !schedulesOverlap(candidate, existing)) continue;
 
-      if (existing.roomId === candidate.roomId) {
-        conflicts.push({ type: 'room', schedule: existing, roomId: candidate.roomId });
+      const existingRoom = getRoomById(existing.roomId);
+      if (candidateRoom && existingRoom) {
+        if (!isOnlineRoom(candidateRoom) && !isOnlineRoom(existingRoom) && existing.roomId === candidate.roomId) {
+          conflicts.push({ type: 'room', schedule: existing, roomId: candidate.roomId });
+        } else if (isOnlineRoom(candidateRoom) && isOnlineRoom(existingRoom)) {
+          const candidateLinkKey = meetingUrlKey(candidate.meetingUrl);
+          const existingLinkKey = meetingUrlKey(existing.meetingUrl);
+          if (candidateLinkKey && existingLinkKey && candidateLinkKey === existingLinkKey) {
+            conflicts.push({ type: 'online-link', schedule: existing, roomId: candidate.roomId, meetingUrl: candidate.meetingUrl });
+          }
+        }
       }
 
       const lecturerClashes = candidate.lecturerIds.filter((id) => existing.lecturerIds.includes(id));
@@ -730,7 +848,13 @@
         const room = data.rooms.find((item) => item.id === conflict.roomId);
         const key = `room-${schedule.id}-${conflict.roomId}`;
         if (!seen.has(key)) {
-          lines.push(`<li><b>Bentrok ruang:</b> ${escapeHtml(room?.name || 'Ruang')} sudah dipakai oleh <b>${escapeHtml(schedule.courseName)}</b> pada ${escapeHtml(rangeText)}.</li>`);
+          lines.push(`<li><b>Bentrok ruang fisik:</b> ${escapeHtml(room?.name || 'Ruang')} sudah dipakai oleh <b>${escapeHtml(schedule.courseName)}</b> pada ${escapeHtml(rangeText)}.</li>`);
+          seen.add(key);
+        }
+      } else if (conflict.type === 'online-link') {
+        const key = `online-link-${schedule.id}-${meetingUrlKey(conflict.meetingUrl)}`;
+        if (!seen.has(key)) {
+          lines.push(`<li><b>Bentrok link online:</b> link ${escapeHtml(meetingServiceLabel(conflict.meetingUrl))} yang sama sudah dipakai oleh <b>${escapeHtml(schedule.courseName)}</b> pada ${escapeHtml(rangeText)}. Gunakan link Google Meet/Zoom yang berbeda.</li>`);
           seen.add(key);
         }
       } else {
@@ -784,6 +908,8 @@
     els.sksInput.value = String(schedule.sks || '');
     updateDurationSummary();
     els.roomSelect.value = schedule.roomId;
+    els.meetingUrl.value = schedule.meetingUrl || '';
+    updateOnlineRoomUI();
     els.notes.value = schedule.notes || '';
     els.lecturerSearch.value = '';
     renderLecturerChoices(schedule.lecturerIds);
@@ -822,6 +948,8 @@
     els.startTime.value = '';
     els.endTime.value = '';
     els.sksInput.value = '';
+    els.meetingUrl.value = '';
+    updateOnlineRoomUI();
     updateDurationSummary();
     renderLecturerChoices();
     renderRoomOptions();
@@ -832,6 +960,8 @@
     renderLecturerList();
     renderRoomList();
     renderRoomOptions();
+    updateRoomMasterForm();
+    updateOnlineRoomUI();
     updateDurationSummary();
     renderLecturerChoices(getSelectedLecturerIds());
     renderScheduleList();
@@ -895,8 +1025,8 @@
       return `
         <div class="master-item">
           <div>
-            <div class="master-item-name">${escapeHtml(room.name)}</div>
-            <small>${room.capacity ? `Kapasitas ${escapeHtml(room.capacity)} • ` : ''}${count} jadwal</small>
+            <div class="master-item-name">${escapeHtml(room.name)} <span class="room-type-badge ${isOnlineRoom(room) ? 'online' : 'physical'}">${isOnlineRoom(room) ? 'Online' : 'Fisik'}</span></div>
+            <small>${isOnlineRoom(room) ? 'Tidak memakai ruang kelas fisik • ' : (room.capacity ? `Kapasitas ${escapeHtml(room.capacity)} • ` : '')}${count} jadwal</small>
           </div>
           <button class="icon-btn danger" type="button" data-remove-room="${escapeHtml(room.id)}">Hapus</button>
         </div>`;
@@ -910,7 +1040,7 @@
   function renderRoomOptions() {
     const current = els.roomSelect.value;
     const rooms = sortRooms(data.rooms);
-    els.roomSelect.innerHTML = '<option value="">Pilih ruang</option>' + rooms.map((room) => `<option value="${escapeHtml(room.id)}">${escapeHtml(room.name)}</option>`).join('');
+    els.roomSelect.innerHTML = '<option value="">Pilih ruang / mode</option>' + rooms.map((room) => `<option value="${escapeHtml(room.id)}">${isOnlineRoom(room) ? '🌐 ' : ''}${escapeHtml(room.name)}${isOnlineRoom(room) ? ' (Online)' : ''}</option>`).join('');
     if (rooms.some((room) => room.id === current)) els.roomSelect.value = current;
   }
 
@@ -1057,8 +1187,9 @@
               <span class="meta-pill primary">${escapeHtml(schedule.day)}</span>
               <span class="meta-pill">${escapeHtml(scheduleTimeLabel(schedule))}</span>
               <span class="meta-pill">${schedule.sks} SKS • ${schedule.sks * 50} menit efektif</span>
-              <span class="meta-pill">${escapeHtml(room?.name || 'Ruang tidak ditemukan')}</span>
+              <span class="meta-pill">${isOnlineRoom(room) ? '🌐 ' : ''}${escapeHtml(room?.name || 'Ruang tidak ditemukan')}</span>
             </div>
+            ${isOnlineRoom(room) && schedule.meetingUrl ? `<div class="online-link-line"><b>${escapeHtml(meetingServiceLabel(schedule.meetingUrl))}:</b> <a href="${escapeHtml(normalizeMeetingUrl(schedule.meetingUrl))}" target="_blank" rel="noopener noreferrer">${escapeHtml(schedule.meetingUrl)}</a></div>` : ''}
             <div class="lecturer-line"><b>Tim Teaching:</b> ${lecturers.length ? lecturers.map((item, index) => `${index + 1}. ${escapeHtml(item.name)} <small>(${escapeHtml(item.assignment.label)})</small>`).join('<br>') : 'Dosen tidak ditemukan'}</div>
             ${schedule.notes ? `<div class="schedule-notes">Catatan: ${escapeHtml(schedule.notes)}</div>` : ''}
           </div>
@@ -1130,8 +1261,9 @@
             <span class="meta-pill">${escapeHtml(scheduleTimeLabel(schedule))}</span>
             <span class="meta-pill">${schedule.sks} SKS • ${schedule.sks * 50} menit efektif</span>
             <span class="meta-pill teaching-phase-pill">${escapeHtml(assignment.label)}</span>
-            <span class="meta-pill">${escapeHtml(room?.name || 'Ruang tidak ditemukan')}</span>
+            <span class="meta-pill">${isOnlineRoom(room) ? '🌐 ' : ''}${escapeHtml(room?.name || 'Ruang tidak ditemukan')}</span>
           </div>
+          ${isOnlineRoom(room) && schedule.meetingUrl ? `<div class="online-link-line compact"><b>${escapeHtml(meetingServiceLabel(schedule.meetingUrl))}:</b> <a href="${escapeHtml(normalizeMeetingUrl(schedule.meetingUrl))}" target="_blank" rel="noopener noreferrer">${escapeHtml(schedule.meetingUrl)}</a></div>` : ''}
         </div>`;
     }).join('');
   }
@@ -1216,7 +1348,7 @@
     return `
       <div class="plot-entry">
         <div class="plot-course">${schedule.courseCode ? `${escapeHtml(schedule.courseCode)} • ` : ``}${escapeHtml(schedule.courseName)}</div>
-        <div class="plot-class">${escapeHtml(scheduleTimeLabel(schedule))} • ${escapeHtml(schedule.programStudy)} • Angkatan ${escapeHtml(schedule.cohort)} • ${schedule.sks} SKS</div>
+        <div class="plot-class">${escapeHtml(scheduleTimeLabel(schedule))} • ${escapeHtml(schedule.programStudy)} • Angkatan ${escapeHtml(schedule.cohort)} • ${schedule.sks} SKS${isOnlineRoom(schedule.roomId) ? ` • ${escapeHtml(meetingServiceLabel(schedule.meetingUrl))}` : ''}</div>
         <div class="plot-lecturers">${lecturers.map((item, index) => `${index + 1}. ${escapeHtml(item.name)} <small>(${escapeHtml(item.assignment.label)})</small>`).join('<br>')}</div>
       </div>`;
   }
@@ -1320,7 +1452,7 @@
         courseNameEn: schedule.courseNameEn || '',
         sks: schedule.sks,
         lecturers,
-        room: room?.name || '-'
+        room: isOnlineRoom(room) ? `${room?.name || 'Online'} (${meetingServiceLabel(schedule.meetingUrl)})` : (room?.name || '-')
       };
     });
 
