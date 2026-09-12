@@ -201,8 +201,68 @@ textarea { resize: vertical; }
 }
 .lecturer-choice:hover { background: #f5f8ff; border-color: #c6d5f4; }
 .lecturer-choice input { width: auto; margin: 3px 0 0; accent-color: var(--primary); }
-.lecturer-choice span { display: block; font-size: 13px; font-weight: 750; color: #344054; }
+.lecturer-choice span { display: block; font-size: 13px; font-weight: 750; color: #344054; min-width: 0; flex: 1; }
 .lecturer-choice small { display: block; color: var(--muted); margin-top: 1px; font-weight: 500; }
+.lecturer-choice-order {
+  flex: 0 0 auto;
+  align-self: center;
+  padding: 4px 7px;
+  border-radius: 999px;
+  background: #eef4ff;
+  color: #3557a8;
+  font-size: 11px;
+  white-space: nowrap;
+}
+.lecturer-order {
+  margin-top: 12px;
+  border-top: 1px solid #e4e7ec;
+  padding-top: 12px;
+  display: grid;
+  gap: 8px;
+}
+.lecturer-order-title { font-weight: 850; color: #344054; font-size: 13px; }
+.lecturer-order-empty {
+  padding: 10px 11px;
+  border: 1px dashed #cfd7e6;
+  border-radius: 9px;
+  color: var(--muted);
+  background: #fbfcfe;
+  font-size: 12px;
+}
+.lecturer-order-item {
+  display: grid;
+  grid-template-columns: 32px minmax(0, 1fr) auto;
+  gap: 9px;
+  align-items: center;
+  padding: 9px 10px;
+  border: 1px solid #dfe5ef;
+  border-radius: 10px;
+  background: #fff;
+}
+.lecturer-order-number {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-weight: 900;
+  background: #eef4ff;
+  color: #3557a8;
+}
+.lecturer-order-main { min-width: 0; }
+.lecturer-order-main strong { display: block; color: #24324a; overflow-wrap: anywhere; }
+.lecturer-order-main small { display: block; margin-top: 2px; color: var(--muted); line-height: 1.35; }
+.lecturer-order-actions { display: flex; gap: 5px; flex-wrap: wrap; justify-content: flex-end; }
+.lecturer-order-actions .icon-btn:disabled { opacity: .4; cursor: not-allowed; }
+.lecturer-order-note {
+  padding: 9px 10px;
+  border-radius: 9px;
+  background: #f5f8ff;
+  color: #475467;
+  font-size: 12px;
+  line-height: 1.45;
+}
+.lecturer-order-note.warning { background: #fff8e6; color: #7a5610; }
 
 .form-actions { display: flex; gap: 9px; margin-top: 17px; }
 .btn {
@@ -494,4 +554,20 @@ textarea { resize: vertical; }
 @media (max-width: 760px) {
   .pdf-program-item { align-items: flex-start; flex-direction: column; }
   .pdf-program-item .btn { width: 100%; }
+}
+
+.lecturer-line small,
+.plot-lecturers small {
+  color: var(--muted);
+  font-weight: 600;
+}
+.teaching-phase-pill {
+  background: #eef4ff;
+  color: #3557a8;
+  border-color: #c8d8f6;
+}
+
+@media (max-width: 760px) {
+  .lecturer-order-item { grid-template-columns: 30px minmax(0, 1fr); }
+  .lecturer-order-actions { grid-column: 1 / -1; justify-content: flex-start; padding-left: 39px; }
 }
