@@ -1,25 +1,62 @@
-# Plotting Jadwal Perkuliahan Jumat & Sabtu — Versi SKS
+# Plotting Jadwal Perkuliahan Jumat & Sabtu — V5
 
-Aplikasi web statis untuk menyusun plotting jadwal perkuliahan **khusus hari Jumat dan Sabtu**. Aplikasi tidak memakai database; seluruh data disimpan di browser menggunakan `localStorage`.
+Aplikasi web statis untuk menyusun plotting jadwal perkuliahan khusus **Jumat dan Sabtu**. Tidak memakai database; seluruh data disimpan di browser menggunakan `localStorage`.
 
-## Pembaruan versi ini
+## Pembaruan V5
 
-Pada menu **Tambah Jadwal Perkuliahan**, durasi kuliah sekarang dapat ditentukan dengan:
+Versi ini menyederhanakan input jadwal agar lebih aman dan mudah digunakan oleh operator:
 
-- **Sesi Mulai**;
-- **Sesi Selesai**; atau
-- **Jumlah SKS**.
+### Program Studi menjadi dropdown tetap
 
-Ketentuan yang digunakan adalah **1 SKS = 50 menit = 1 sesi** sesuai template jadwal. Setelah Sesi Mulai dipilih:
+Pengguna tidak perlu lagi mengetik nama program studi. Pilihan yang tersedia adalah:
 
-- jika pengguna memilih **Jumlah SKS**, aplikasi otomatis menentukan Sesi Selesai;
-- jika pengguna memilih **Sesi Selesai**, aplikasi otomatis menghitung Jumlah SKS.
+1. **Magister Teknologi Informasi**
+2. **Magister Manajemen**
+3. **Magister Hukum**
 
-Contoh: Jumat mulai Sesi 1 (16.00–16.50) dan memilih 3 SKS akan menggunakan Sesi 1, 2, dan 3, sehingga jadwal berakhir pukul 18.30.
+Dengan cara ini penulisan nama program studi selalu konsisten dan hasil PDF tidak terpecah karena perbedaan ejaan.
 
-Pada hari Sabtu, jeda **ISTIRAHAT 18.10–18.30** tidak dihitung sebagai SKS. Misalnya jadwal 3 SKS yang melintasi waktu istirahat tetap terdiri dari tiga sesi kuliah masing-masing 50 menit.
+### Angkatan menjadi dropdown tahun
 
-## Sesi waktu sesuai template
+Kolom Angkatan tidak perlu diketik. Pilihan dimulai dari **2025** dan dibuat otomatis sampai **10 tahun setelah tahun berjalan**. Daftar ini akan bertambah otomatis seiring pergantian tahun, sehingga source code tidak perlu diedit setiap tahun.
+
+Jika data lama memiliki angkatan yang lebih jauh di masa depan, tahun tersebut tetap ikut dimunculkan agar data lama tetap dapat diedit.
+
+## Fitur PDF per Program Studi
+
+Aplikasi dapat mengunduh PDF jadwal berdasarkan Program Studi dengan format:
+
+- judul `Jadwal Perkuliahan`;
+- nama Program Studi;
+- nama institusi;
+- Semester dan Tahun Akademik;
+- tabel kolom **Hari, Jam, Kode, Mata Kuliah, SKS, Dosen Pengampu, Ruang**;
+- header tabel biru dan baris data selang-seling;
+- nama mata kuliah bahasa Inggris opsional;
+- jadwal diurutkan otomatis Jumat lalu Sabtu berdasarkan jam mulai;
+- satu file PDF hanya berisi satu Program Studi.
+
+PDF dibuat langsung di browser tanpa backend dan tanpa mengirim data ke layanan pihak ketiga.
+
+## Input jadwal
+
+Form **Tambah Jadwal Perkuliahan** berisi:
+
+- Kode Mata Kuliah;
+- Nama Mata Kuliah;
+- Nama Mata Kuliah Bahasa Inggris (opsional);
+- Program Studi — dropdown;
+- Angkatan — dropdown mulai 2025;
+- Hari — Jumat atau Sabtu;
+- Sesi Mulai;
+- Sesi Selesai / Jumlah SKS;
+- Ruang;
+- satu atau lebih Dosen Pengampu;
+- Catatan.
+
+## Aturan sesi dan SKS
+
+**1 SKS = 50 menit = 1 sesi.**
 
 ### Jumat
 
@@ -37,64 +74,63 @@ Pada hari Sabtu, jeda **ISTIRAHAT 18.10–18.30** tidak dihitung sebagai SKS. Mi
 3. 15.40–16.30
 4. 16.30–17.20
 5. 17.20–18.10
-6. **ISTIRAHAT 18.10–18.30**
+6. ISTIRAHAT 18.10–18.30 (bukan SKS)
 7. 18.30–19.20
 8. 19.20–20.10
 9. 20.10–21.00
 
-> Catatan: pada aplikasi, sesi perkuliahan Sabtu tetap bernomor 1–8 karena baris istirahat bukan sesi/SKS.
+Di dalam aplikasi sesi kuliah Sabtu tetap bernomor 1–8 karena waktu istirahat bukan sesi perkuliahan.
 
 ## Validasi bentrok
 
-Aplikasi memeriksa **semua sesi yang dipakai** oleh sebuah mata kuliah. Jadwal ditolak apabila pada salah satu sesi tersebut:
+Jadwal tidak dapat disimpan jika pada salah satu sesi yang sama:
 
-- ruang yang sama sudah digunakan oleh mata kuliah lain; atau
+- ruang sudah digunakan jadwal lain; atau
 - salah satu dosen yang dipilih sudah mengajar pada jadwal lain.
 
-Karena satu jadwal dapat berisi lebih dari satu dosen, validasi bentrok dilakukan terhadap **seluruh dosen pengampu**.
+Jika satu jadwal memiliki beberapa dosen, **semua dosen diperiksa** terhadap kemungkinan bentrok.
 
 ## Fitur utama
 
-- Perkuliahan hanya Jumat dan Sabtu.
-- Tambah/hapus data dosen.
-- Tambah/hapus data ruang.
-- Tersedia awal Ruang 1 sampai Ruang 6.
-- Satu jadwal dapat memiliki beberapa dosen.
-- Input mata kuliah, program studi, angkatan, hari, sesi mulai, sesi selesai/jumlah SKS, ruang, dosen, dan catatan.
-- Detail dosen menampilkan mata kuliah, program studi, angkatan, hari, rentang jam, jumlah SKS, dan ruang.
-- Plot jadwal tabel waktu × ruang.
-- Mata kuliah dengan lebih dari 1 SKS ditampilkan pada seluruh baris sesi yang dipakai.
+- Dropdown Program Studi yang konsisten.
+- Dropdown Angkatan otomatis mulai tahun 2025.
+- Tambah/hapus dosen.
+- Tambah/hapus ruang.
+- Multi-dosen dalam satu jadwal.
+- Durasi otomatis berdasarkan sesi/SKS.
+- Detail beban mengajar dosen.
+- Plot waktu × ruang untuk Jumat dan Sabtu.
 - Edit/hapus jadwal.
-- Cetak plot jadwal.
-- Backup dan restore JSON.
-- Migrasi otomatis dari versi aplikasi sebelumnya (`plottingJadwalJumatSabtu_v2`). Jadwal lama dianggap 1 SKS karena versi lama hanya menyimpan satu sesi per jadwal.
-- Responsif untuk desktop, laptop, dan ponsel.
+- Cetak plot.
+- Unduh PDF per Program Studi.
+- PDF multi-halaman otomatis jika jadwal banyak.
+- Backup/restore JSON.
+- Migrasi otomatis data `localStorage` dari V4, V3, dan V2.
+- Responsif untuk komputer dan ponsel.
 
 ## Struktur proyek
 
 ```text
-plotting-jadwal-jumat-sabtu-v3/
+plotting-jadwal-jumat-sabtu-v5/
 ├── index.html
 ├── styles.css
 ├── app.js
+├── pdf-generator.js
 └── README.md
 ```
 
-Tidak ada framework, package manager, backend, database, atau environment variable yang diperlukan.
+`pdf-generator.js` adalah generator PDF ringan yang disertakan langsung di proyek, sehingga tidak memakai CDN atau library eksternal.
 
-## Menjalankan di komputer
+## Update GitHub + Vercel
 
-Cukup buka `index.html` menggunakan browser modern.
+1. Backup data aplikasi lama melalui menu **Backup**.
+2. Ekstrak paket V5.
+3. Ganti lima file proyek lama dengan file V5.
+4. Commit dan push ke repository GitHub.
+5. Vercel yang sudah terhubung akan melakukan deployment ulang otomatis.
 
-## Update GitHub dan Vercel
-
-Jika aplikasi sebelumnya sudah berada di repository GitHub dan telah terhubung ke Vercel:
-
-1. backup data dari aplikasi lama terlebih dahulu;
-2. ganti `index.html`, `styles.css`, `app.js`, dan `README.md` dengan file versi ini;
-3. commit dan push ke GitHub;
-4. Vercel akan membuat deployment baru secara otomatis.
+Tidak diperlukan Node.js, build command, backend, database, atau environment variable.
 
 ## Penyimpanan data
 
-Data disimpan dengan `localStorage` pada browser/perangkat yang digunakan. Data tidak otomatis sinkron antar komputer. Gunakan fitur **Backup Data** dan **Impor Backup** untuk memindahkan atau mengamankan data.
+Data hanya berada di browser/perangkat melalui `localStorage`. Data tidak otomatis sinkron antar komputer. Gunakan **Backup Data** dan **Impor Backup** bila perlu memindahkan atau mengamankan data.
