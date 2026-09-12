@@ -297,15 +297,15 @@
             <button class="btn btn-secondary" type="submit">Simpan Identitas PDF</button>
           </form>
           <div class="pdf-help">
-            <b>Catatan:</b> PDF dibuat langsung di browser tanpa database dan tanpa mengirim data ke server. Setiap file hanya berisi jadwal dari satu program studi.
+            <b>Catatan:</b> PDF dibuat langsung di browser tanpa database dan tanpa mengirim data ke server. Setiap file hanya berisi jadwal dari satu program studi dan satu angkatan, sehingga jadwal antarangkatan tidak tercampur.
           </div>
         </article>
 
         <article class="card">
           <div class="card-heading">
-            <p class="step-label">PDF PER PROGRAM STUDI</p>
+            <p class="step-label">PDF PER PROGRAM STUDI & ANGKATAN</p>
             <h2>Unduh Jadwal</h2>
-            <p>Pilih tombol pada program studi yang diinginkan. Jadwal otomatis diurutkan Jumat lalu Sabtu berdasarkan jam mulai.</p>
+            <p>Pilih angkatan pada masing-masing program studi. Setiap PDF hanya memuat satu angkatan dan diurutkan Jumat lalu Sabtu, kemudian dari jam mulai paling awal.</p>
           </div>
           <div id="pdfProgramList" class="pdf-program-list"></div>
         </article>
