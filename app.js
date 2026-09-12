@@ -1,10 +1,10 @@
 (() => {
   'use strict';
 
-  const STORAGE_KEY = 'plottingJadwalJumatSabtu_v6';
-  const PREVIOUS_STORAGE_KEYS = ['plottingJadwalJumatSabtu_v5', 'plottingJadwalJumatSabtu_v4', 'plottingJadwalJumatSabtu_v3', 'plottingJadwalJumatSabtu_v2'];
+  const STORAGE_KEY = 'plottingJadwalJumatSabtu_v7';
+  const PREVIOUS_STORAGE_KEYS = ['plottingJadwalJumatSabtu_v6', 'plottingJadwalJumatSabtu_v5', 'plottingJadwalJumatSabtu_v4', 'plottingJadwalJumatSabtu_v3', 'plottingJadwalJumatSabtu_v2'];
   const LEGACY_STORAGE_KEY = 'plottingJadwalKuliah_v1';
-  const DATA_VERSION = 6;
+  const DATA_VERSION = 7;
 
   const PROGRAM_STUDIES = [
     'Magister Teknologi Informasi',
@@ -83,6 +83,7 @@
     durationSummary: $('durationSummary'),
     roomSelect: $('roomSelect'),
     lecturerChoices: $('lecturerChoices'),
+    lecturerOrder: $('lecturerOrder'),
     lecturerSearch: $('lecturerSearch'),
     btnClearLecturers: $('btnClearLecturers'),
     notes: $('notes'),
@@ -159,8 +160,20 @@
       if (checkbox) {
         if (checkbox.checked) draftLecturerIds.add(checkbox.value);
         else draftLecturerIds.delete(checkbox.value);
+        renderLecturerOrder();
       }
       previewConflict();
+    });
+    els.lecturerOrder.addEventListener('click', (event) => {
+      const moveButton = event.target.closest('[data-move-lecturer]');
+      const removeButton = event.target.closest('[data-remove-selected-lecturer]');
+      if (moveButton) {
+        moveDraftLecturer(moveButton.dataset.moveLecturer, moveButton.dataset.direction);
+      } else if (removeButton) {
+        draftLecturerIds.delete(removeButton.dataset.removeSelectedLecturer);
+        renderLecturerChoices();
+        previewConflict();
+      }
     });
     els.lecturerSearch.addEventListener('input', () => renderLecturerChoices());
     els.btnClearLecturers.addEventListener('click', () => {
@@ -513,6 +526,83 @@
     return [...draftLecturerIds];
   }
 
+  function lecturerAssignment(schedule, lecturerId) {
+    const ids = Array.isArray(schedule?.lecturerIds) ? schedule.lecturerIds : [];
+    const index = ids.indexOf(lecturerId);
+    if (index < 0) return { position: 0, phase: 'none', label: 'Tidak terdaftar' };
+
+    const position = index + 1;
+    if (ids.length === 1) {
+      return { position, phase: 'full', label: 'Dosen tunggal • seluruh semester' };
+    }
+    if (position === 1) {
+      return { position, phase: 'pre-uts', label: 'Dosen 1 • sampai dengan UTS' };
+    }
+    if (position === 2) {
+      return { position, phase: 'post-uts', label: 'Dosen 2 • setelah UTS sampai dengan UAS' };
+    }
+    return { position, phase: 'full', label: `Dosen ${position} • dianggap seluruh semester` };
+  }
+
+  function teachingPhasesOverlap(first, second) {
+    const phases = [first?.phase, second?.phase];
+    if (phases.includes('none')) return false;
+    if (phases.includes('full')) return true;
+    return first.phase === second.phase;
+  }
+
+  function moveDraftLecturer(lecturerId, direction) {
+    const ids = [...draftLecturerIds];
+    const index = ids.indexOf(lecturerId);
+    if (index < 0) return;
+    const target = direction === 'up' ? index - 1 : index + 1;
+    if (target < 0 || target >= ids.length) return;
+    [ids[index], ids[target]] = [ids[target], ids[index]];
+    draftLecturerIds = new Set(ids);
+    renderLecturerChoices();
+    previewConflict();
+  }
+
+  function renderLecturerOrder() {
+    const ids = [...draftLecturerIds];
+    if (!ids.length) {
+      els.lecturerOrder.innerHTML = '<div class="lecturer-order-empty">Belum ada dosen dipilih. Urutan pemilihan menentukan periode mengajar.</div>';
+      return;
+    }
+
+    const rows = ids.map((id, index) => {
+      const lecturer = data.lecturers.find((item) => item.id === id);
+      if (!lecturer) return '';
+      const assignment = lecturerAssignment({ lecturerIds: ids }, id);
+      return `
+        <div class="lecturer-order-item">
+          <div class="lecturer-order-number">${index + 1}</div>
+          <div class="lecturer-order-main">
+            <strong>${escapeHtml(lecturer.name)}</strong>
+            <small>${escapeHtml(assignment.label)}</small>
+          </div>
+          <div class="lecturer-order-actions">
+            <button class="icon-btn" type="button" data-move-lecturer="${escapeHtml(id)}" data-direction="up" ${index === 0 ? 'disabled' : ''} aria-label="Naikkan urutan ${escapeHtml(lecturer.name)}">↑</button>
+            <button class="icon-btn" type="button" data-move-lecturer="${escapeHtml(id)}" data-direction="down" ${index === ids.length - 1 ? 'disabled' : ''} aria-label="Turunkan urutan ${escapeHtml(lecturer.name)}">↓</button>
+            <button class="icon-btn danger" type="button" data-remove-selected-lecturer="${escapeHtml(id)}" aria-label="Hapus ${escapeHtml(lecturer.name)} dari pilihan">Hapus</button>
+          </div>
+        </div>`;
+    }).join('');
+
+    const extraNote = ids.length > 2
+      ? '<div class="lecturer-order-note warning"><b>Catatan:</b> Aturan pengguna hanya mendefinisikan Dosen 1 dan Dosen 2. Untuk keamanan bentrok, Dosen ke-3 dan seterusnya dianggap mengajar sepanjang semester.</div>'
+      : '';
+    const singleNote = ids.length === 1
+      ? '<div class="lecturer-order-note"><b>Dosen tunggal:</b> dianggap mengajar sepanjang semester, sehingga tetap bentrok dengan jadwal lain pada jam yang sama.</div>'
+      : '';
+
+    els.lecturerOrder.innerHTML = `
+      <div class="lecturer-order-title">Urutan Tim Teaching</div>
+      ${rows}
+      ${singleNote}
+      ${extraNote}`;
+  }
+
   function getScheduleFormValue() {
     const startTime = els.startTime.value;
     let endTime = els.endTime.value;
@@ -584,7 +674,19 @@
       }
 
       const lecturerClashes = candidate.lecturerIds.filter((id) => existing.lecturerIds.includes(id));
-      lecturerClashes.forEach((lecturerId) => conflicts.push({ type: 'lecturer', schedule: existing, lecturerId }));
+      lecturerClashes.forEach((lecturerId) => {
+        const candidateAssignment = lecturerAssignment(candidate, lecturerId);
+        const existingAssignment = lecturerAssignment(existing, lecturerId);
+        if (teachingPhasesOverlap(candidateAssignment, existingAssignment)) {
+          conflicts.push({
+            type: 'lecturer',
+            schedule: existing,
+            lecturerId,
+            candidateAssignment,
+            existingAssignment
+          });
+        }
+      });
     }
 
     return { errors, conflicts };
@@ -635,7 +737,9 @@
         const lecturer = data.lecturers.find((item) => item.id === conflict.lecturerId);
         const key = `lecturer-${schedule.id}-${conflict.lecturerId}`;
         if (!seen.has(key)) {
-          lines.push(`<li><b>Bentrok dosen:</b> ${escapeHtml(lecturer?.name || 'Dosen')} sudah mengajar <b>${escapeHtml(schedule.courseName)}</b> pada ${escapeHtml(rangeText)}.</li>`);
+          const candidateRole = conflict.candidateAssignment?.label || 'Periode mengajar tidak diketahui';
+          const existingRole = conflict.existingAssignment?.label || 'Periode mengajar tidak diketahui';
+          lines.push(`<li><b>Bentrok dosen:</b> ${escapeHtml(lecturer?.name || 'Dosen')} terjadwal pada periode mengajar yang sama. Jadwal baru: <b>${escapeHtml(candidateRole)}</b>; pada <b>${escapeHtml(schedule.courseName)}</b>: <b>${escapeHtml(existingRole)}</b>, ${escapeHtml(rangeText)}.</li>`);
           seen.add(key);
         }
       }
@@ -897,18 +1001,27 @@
 
     if (!data.lecturers.length) {
       els.lecturerChoices.innerHTML = '<div class="empty-state"><strong>Data dosen masih kosong.</strong>Tambahkan dosen pada menu Data Dosen & Ruang.</div>';
+      renderLecturerOrder();
       return;
     }
     if (!lecturers.length) {
       els.lecturerChoices.innerHTML = '<div class="empty-state">Nama dosen tidak ditemukan.</div>';
+      renderLecturerOrder();
       return;
     }
 
-    els.lecturerChoices.innerHTML = lecturers.map((lecturer) => `
-      <label class="lecturer-choice">
-        <input type="checkbox" name="lecturerIds" value="${escapeHtml(lecturer.id)}" ${selected.has(lecturer.id) ? 'checked' : ''} />
-        <span>${escapeHtml(lecturer.name)}<small>${escapeHtml(lecturer.code || 'Tanpa NIDN/Kode')}</small></span>
-      </label>`).join('');
+    els.lecturerChoices.innerHTML = lecturers.map((lecturer) => {
+      const selectedIds = [...selected];
+      const selectedIndex = selectedIds.indexOf(lecturer.id);
+      const orderBadge = selectedIndex >= 0 ? `<b class="lecturer-choice-order">Dosen ${selectedIndex + 1}</b>` : '';
+      return `
+        <label class="lecturer-choice">
+          <input type="checkbox" name="lecturerIds" value="${escapeHtml(lecturer.id)}" ${selected.has(lecturer.id) ? 'checked' : ''} />
+          <span>${escapeHtml(lecturer.name)}<small>${escapeHtml(lecturer.code || 'Tanpa NIDN/Kode')}</small></span>
+          ${orderBadge}
+        </label>`;
+    }).join('');
+    renderLecturerOrder();
   }
 
   function scheduleSortValue(schedule) {
@@ -930,7 +1043,11 @@
 
     els.scheduleList.innerHTML = list.map((schedule) => {
       const room = data.rooms.find((item) => item.id === schedule.roomId);
-      const lecturers = schedule.lecturerIds.map((id) => data.lecturers.find((item) => item.id === id)?.name).filter(Boolean);
+      const lecturers = schedule.lecturerIds.map((id) => {
+        const lecturer = data.lecturers.find((item) => item.id === id);
+        if (!lecturer) return null;
+        return { name: lecturer.name, assignment: lecturerAssignment(schedule, id) };
+      }).filter(Boolean);
       return `
         <article class="schedule-item">
           <div>
@@ -942,7 +1059,7 @@
               <span class="meta-pill">${schedule.sks} SKS • ${schedule.sks * 50} menit efektif</span>
               <span class="meta-pill">${escapeHtml(room?.name || 'Ruang tidak ditemukan')}</span>
             </div>
-            <div class="lecturer-line"><b>Dosen:</b> ${lecturers.length ? lecturers.map(escapeHtml).join('; ') : 'Dosen tidak ditemukan'}</div>
+            <div class="lecturer-line"><b>Tim Teaching:</b> ${lecturers.length ? lecturers.map((item, index) => `${index + 1}. ${escapeHtml(item.name)} <small>(${escapeHtml(item.assignment.label)})</small>`).join('<br>') : 'Dosen tidak ditemukan'}</div>
             ${schedule.notes ? `<div class="schedule-notes">Catatan: ${escapeHtml(schedule.notes)}</div>` : ''}
           </div>
           <div class="schedule-actions">
@@ -999,6 +1116,7 @@
 
     els.lecturerDetailList.innerHTML = schedules.map((schedule) => {
       const room = data.rooms.find((item) => item.id === schedule.roomId);
+      const assignment = lecturerAssignment(schedule, lecturerId);
       return `
         <div class="detail-item">
           <div class="detail-item-top">
@@ -1011,6 +1129,7 @@
           <div class="detail-meta">
             <span class="meta-pill">${escapeHtml(scheduleTimeLabel(schedule))}</span>
             <span class="meta-pill">${schedule.sks} SKS • ${schedule.sks * 50} menit efektif</span>
+            <span class="meta-pill teaching-phase-pill">${escapeHtml(assignment.label)}</span>
             <span class="meta-pill">${escapeHtml(room?.name || 'Ruang tidak ditemukan')}</span>
           </div>
         </div>`;
@@ -1088,13 +1207,17 @@
 
   function buildPlotEntry(schedule) {
     const lecturers = schedule.lecturerIds
-      .map((id) => data.lecturers.find((item) => item.id === id)?.name)
+      .map((id) => {
+        const lecturer = data.lecturers.find((item) => item.id === id);
+        if (!lecturer) return null;
+        return { name: lecturer.name, assignment: lecturerAssignment(schedule, id) };
+      })
       .filter(Boolean);
     return `
       <div class="plot-entry">
         <div class="plot-course">${schedule.courseCode ? `${escapeHtml(schedule.courseCode)} • ` : ``}${escapeHtml(schedule.courseName)}</div>
         <div class="plot-class">${escapeHtml(scheduleTimeLabel(schedule))} • ${escapeHtml(schedule.programStudy)} • Angkatan ${escapeHtml(schedule.cohort)} • ${schedule.sks} SKS</div>
-        <div class="plot-lecturers">${lecturers.map((name, index) => `${index + 1}. ${escapeHtml(name)}`).join('<br>')}</div>
+        <div class="plot-lecturers">${lecturers.map((item, index) => `${index + 1}. ${escapeHtml(item.name)} <small>(${escapeHtml(item.assignment.label)})</small>`).join('<br>')}</div>
       </div>`;
   }
 
