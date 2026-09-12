@@ -128,9 +128,17 @@
 
             <div class="form-grid one">
               <label>
-                Ruang <span class="required">*</span>
+                Ruang / Mode Perkuliahan <span class="required">*</span>
                 <select id="roomSelect" required></select>
               </label>
+            </div>
+
+            <div id="meetingUrlField" class="form-grid one hidden">
+              <label>
+                Link Google Meet / Zoom <span class="required">*</span>
+                <input id="meetingUrl" type="url" inputmode="url" placeholder="Contoh: https://meet.google.com/abc-defg-hij" maxlength="300" />
+              </label>
+              <p class="field-help online-help"><b>Khusus ruang online:</b> ruang online boleh dipakai beberapa jadwal pada hari/jam yang sama selama <b>link Google Meet/Zoom berbeda</b>. Link yang sama pada waktu yang bertabrakan tetap ditolak.</p>
             </div>
 
             <fieldset class="lecturer-fieldset">
@@ -205,14 +213,21 @@
           <div class="card-heading">
             <p class="step-label">MASTER RUANG</p>
             <h2>Data Ruang</h2>
-            <p>Secara awal tersedia Ruang 1 sampai Ruang 6 sesuai format template. Anda tetap dapat menambah ruang.</p>
+            <p>Secara awal tersedia Ruang 1 sampai Ruang 6 serta mode Online. Ruang fisik tidak boleh dipakai bersamaan; ruang online boleh bersamaan jika link Google Meet/Zoom berbeda.</p>
           </div>
-          <form id="roomForm" class="compact-form">
+          <form id="roomForm" class="compact-form room-form-grid">
             <label>
               Nama Ruang <span class="required">*</span>
-              <input id="roomName" type="text" placeholder="Contoh: Ruang 7" required maxlength="80" />
+              <input id="roomName" type="text" placeholder="Contoh: Ruang 7 / Online Kelas A" required maxlength="80" />
             </label>
             <label>
+              Jenis Ruang <span class="required">*</span>
+              <select id="roomType" required>
+                <option value="physical">Ruang Fisik</option>
+                <option value="online">Ruang Online</option>
+              </select>
+            </label>
+            <label id="roomCapacityField">
               Kapasitas <span class="optional">(opsional)</span>
               <input id="roomCapacity" type="number" min="1" max="2000" placeholder="Contoh: 40" />
             </label>
