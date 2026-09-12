@@ -161,7 +161,7 @@ textarea { resize: vertical; }
 .form-grid { display: grid; gap: 12px; margin-bottom: 13px; }
 .form-grid.one { grid-template-columns: 1fr; }
 .form-grid.two { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-.form-grid.three { grid-template-columns: .75fr .75fr 1.4fr; }
+.form-grid.three { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .notes-label { display: block; margin-top: 13px; }
 .compact-form {
   display: grid;
@@ -419,6 +419,36 @@ textarea { resize: vertical; }
   border-radius: 10px;
   background: var(--primary-soft);
   line-height: 1.5;
+}
+
+.duration-summary {
+  margin: -2px 0 14px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: #fff;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+.duration-summary-ok {
+  border-color: #b7dfc4;
+  background: #f0faf3;
+  color: #176b36;
+  font-weight: 700;
+}
+.duration-summary-error {
+  border-color: #f0b9b9;
+  background: #fff3f3;
+  color: #a82424;
+  font-weight: 700;
+}
+
+.plot-empty-row {
+  text-align: center;
+  color: var(--muted);
+  padding: 18px !important;
+  background: #fff;
 }
 
 .course-code-inline {
