@@ -1,24 +1,63 @@
-# Plotting Jadwal Perkuliahan Jumat & Sabtu — V6
+# Plotting Jadwal Perkuliahan Jumat & Sabtu — V7
 
-Aplikasi web statis untuk menyusun plotting jadwal perkuliahan khusus **Jumat dan Sabtu**. Tidak memakai database; seluruh data disimpan pada browser menggunakan `localStorage`.
+Aplikasi web statis untuk menyusun plotting jadwal perkuliahan program magister khusus **Jumat dan Sabtu**. Tidak memakai database; seluruh data disimpan pada browser menggunakan `localStorage`.
 
-## Pembaruan V6 — Jam Mulai Dinamis
+## Pembaruan V7 — Validasi Bentrok Tim Teaching
 
-Bagian **Tambah Jadwal Perkuliahan** sekarang tidak lagi membatasi jam mulai pada plotting/template sesi tertentu.
+Validasi bentrok dosen sekarang memahami pembagian periode mengajar berdasarkan **urutan dosen** pada setiap mata kuliah.
 
-Operator dapat memasukkan **jam mulai berapa pun** melalui input waktu, misalnya:
+Aturan utama:
 
-- 08.00
-- 13.25
-- 16.15
-- 18.40
+- **Dosen 1** mengajar **sampai dengan UTS**.
+- **Dosen 2** mengajar **setelah UTS sampai dengan UAS**.
+- Jika suatu mata kuliah hanya memiliki **1 dosen**, dosen tersebut dianggap mengajar **sepanjang semester**.
+- Jika ada **Dosen ke-3 atau seterusnya**, karena periodenya belum didefinisikan dalam aturan, aplikasi secara konservatif menganggap dosen tersebut mengajar **sepanjang semester** untuk pemeriksaan bentrok.
 
-Setelah Jam Mulai diisi, pengguna dapat memilih salah satu cara berikut:
+### Contoh yang TIDAK dianggap bentrok
 
-1. mengisi **Jumlah SKS**, lalu Jam Selesai dihitung otomatis; atau
-2. mengisi **Jam Selesai**, lalu Jumlah SKS dihitung otomatis.
+Pada waktu yang sama:
 
-Aturannya tetap:
+- Mata Kuliah A: Dr. Budi sebagai **Dosen 1** (sampai UTS).
+- Mata Kuliah B: Dr. Budi sebagai **Dosen 2** (setelah UTS–UAS).
+
+Keduanya tidak bentrok karena Dr. Budi mengajar pada dua periode semester yang berbeda.
+
+### Contoh yang tetap dianggap bentrok
+
+Pada waktu yang sama:
+
+- Mata Kuliah A: Dr. Budi sebagai **Dosen 1**.
+- Mata Kuliah B: Dr. Budi sebagai **Dosen 1**.
+
+atau:
+
+- Mata Kuliah A: Dr. Budi sebagai **Dosen 2**.
+- Mata Kuliah B: Dr. Budi sebagai **Dosen 2**.
+
+atau salah satu jadwal hanya memiliki Dr. Budi sebagai **dosen tunggal**.
+
+## Urutan Tim Teaching
+
+Pada form **Tambah Jadwal Perkuliahan**, setelah dosen dicentang akan muncul panel **Urutan Tim Teaching**.
+
+Operator dapat:
+
+- melihat siapa yang menjadi Dosen 1, Dosen 2, dan seterusnya;
+- menaikkan urutan dosen dengan tombol **↑**;
+- menurunkan urutan dosen dengan tombol **↓**;
+- menghapus dosen dari pilihan tanpa menghapus master data dosen.
+
+Urutan ini disimpan bersama jadwal dan digunakan oleh validasi bentrok, Detail Dosen, Plot Jumat–Sabtu, serta urutan nama dosen pada PDF.
+
+## Validasi ruang tetap berlaku
+
+Aturan tim teaching hanya mengubah validasi **dosen**. Ruang tetap tidak boleh digunakan oleh dua mata kuliah pada hari dan rentang jam yang tumpang tindih.
+
+## Jam dan SKS dinamis
+
+Jam mulai dapat diisi bebas. Pengguna dapat mengisi **Jumlah SKS** atau **Jam Selesai**.
+
+Ketentuan:
 
 **1 SKS = 50 menit = 1 sesi.**
 
@@ -27,33 +66,12 @@ Contoh:
 - Mulai 16.15 + 1 SKS → selesai 17.05.
 - Mulai 16.15 + 2 SKS → selesai 17.55.
 - Mulai 16.15 + 3 SKS → selesai 18.45.
-- Mulai 09.10, selesai 10.50 → otomatis 2 SKS.
 
-Jika rentang Jam Mulai–Jam Selesai bukan kelipatan 50 menit, aplikasi menolak penyimpanan dan menampilkan pesan koreksi.
-
-## Validasi bentrok waktu
-
-Validasi tidak lagi bergantung pada nomor sesi tetap. Aplikasi membandingkan **rentang waktu sebenarnya**.
-
-Contoh:
-
-- Jadwal A: 16.15–18.45
-- Jadwal B: 18.00–18.50
-
-Keduanya dianggap bertumpang tindih. Jadwal baru tidak dapat disimpan jika:
-
-- menggunakan ruang yang sama pada waktu yang tumpang tindih; atau
-- salah satu dosen pengampu sudah mengajar pada waktu yang tumpang tindih.
-
-Waktu yang hanya bersentuhan pada batas tidak dianggap bentrok. Contoh 16.00–16.50 dan 16.50–17.40 diperbolehkan.
-
-## Plotting dinamis
-
-Menu **Plot Jumat–Sabtu** sekarang membentuk baris waktu otomatis dari jadwal yang tersimpan. Jadi plotting mengikuti jam yang benar-benar dimasukkan operator dan tidak lagi dipaksa mengikuti daftar sesi lama.
+Jika durasi bukan kelipatan 50 menit, jadwal tidak dapat disimpan.
 
 ## Program Studi
 
-Program Studi tetap berupa dropdown:
+Program Studi berupa dropdown tetap:
 
 1. **Magister Teknologi Informasi**
 2. **Magister Manajemen**
@@ -61,44 +79,31 @@ Program Studi tetap berupa dropdown:
 
 ## Angkatan
 
-Angkatan tetap berupa dropdown mulai **2025** dan otomatis diperpanjang sampai 10 tahun setelah tahun berjalan.
+Angkatan berupa dropdown mulai **2025** dan otomatis diperpanjang sampai 10 tahun setelah tahun berjalan.
 
-## Fitur lain yang tetap tersedia
+## Fitur yang tersedia
 
 - Tambah/hapus dosen.
 - Tambah/hapus ruang.
-- Satu jadwal dapat memiliki beberapa dosen.
-- Detail jadwal setiap dosen.
+- Tim teaching dengan beberapa dosen dan urutan pengajar.
+- Validasi bentrok dosen berdasarkan periode sebelum/sesudah UTS.
+- Validasi bentrok ruang berdasarkan rentang jam aktual.
+- Jam mulai dinamis.
+- Perhitungan SKS otomatis, 1 SKS = 50 menit.
+- Detail jadwal setiap dosen beserta periode mengajarnya.
 - Edit/hapus jadwal.
 - Plot Jumat–Sabtu.
 - Cetak plot.
 - Unduh PDF per Program Studi.
 - Backup/restore JSON.
 - Penyimpanan `localStorage` tanpa database.
-- Migrasi otomatis data versi V5, V4, V3, dan V2.
-- Jadwal lama tetap dipertahankan; jadwal V5 yang dahulu melintasi jeda istirahat Sabtu dapat perlu ditinjau saat diedit agar sesuai aturan durasi dinamis baru.
+- Migrasi otomatis data versi V6, V5, V4, V3, dan V2.
 - Responsif untuk komputer dan ponsel.
-
-## PDF per Program Studi
-
-PDF tetap memuat:
-
-- Judul Jadwal Perkuliahan.
-- Nama Program Studi.
-- Institusi.
-- Semester dan Tahun Akademik.
-- Hari.
-- Jam dinamis sesuai input.
-- Kode Mata Kuliah.
-- Mata Kuliah.
-- SKS.
-- Dosen Pengampu.
-- Ruang.
 
 ## Struktur proyek
 
 ```text
-plotting-jadwal-jumat-sabtu-v6/
+plotting-jadwal-jumat-sabtu-v7/
 ├── index.html
 ├── styles.css
 ├── app.js
@@ -109,8 +114,8 @@ plotting-jadwal-jumat-sabtu-v6/
 ## Update GitHub + Vercel
 
 1. Lakukan **Backup Data** pada aplikasi lama.
-2. Ekstrak paket V6.
-3. Ganti file lama di repository GitHub dengan file V6.
+2. Ekstrak paket V7.
+3. Ganti file lama pada repository GitHub dengan file V7.
 4. Commit dan push ke GitHub.
 5. Vercel yang sudah terhubung akan melakukan deployment ulang otomatis.
 
