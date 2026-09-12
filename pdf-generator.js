@@ -111,6 +111,20 @@
     return lines.length ? lines : [''];
   }
 
+  function pdfRowSortValue(schedule) {
+    const dayRanks = { Jumat: 0, Sabtu: 1 };
+    const dayRank = Object.prototype.hasOwnProperty.call(dayRanks, schedule?.day) ? dayRanks[schedule.day] : 9;
+    const match = String(schedule?.time || '').match(/(\d{1,2})[.:](\d{2})/);
+    const minutes = match ? Number(match[1]) * 60 + Number(match[2]) : 9999;
+    return dayRank * 10000 + minutes;
+  }
+
+  function comparePdfRows(a, b) {
+    return pdfRowSortValue(a) - pdfRowSortValue(b)
+      || String(a?.courseCode || '').localeCompare(String(b?.courseCode || ''), 'id', { numeric: true, sensitivity: 'base' })
+      || String(a?.courseName || '').localeCompare(String(b?.courseName || ''), 'id', { sensitivity: 'base' });
+  }
+
   function rowModel(schedule, widths) {
     const pad = 6;
     const fontSize = 8.8;
@@ -144,11 +158,12 @@
     });
   }
 
-  function drawHeader(content, programStudy, institution, semester, academicYear) {
-    content.push(text(0, 29, 'Jadwal Perkuliahan', 17, 'F3', TEXT, 'center', PAGE_W));
-    content.push(text(0, 64, programStudy || 'Program Studi', 15.5, 'F3', TEXT, 'center', PAGE_W));
-    content.push(text(0, 99, institution || 'Universitas Duta Bangsa Surakarta', 14, 'F3', TEXT, 'center', PAGE_W));
-    content.push(text(0, 133, `${semester || 'Semester 1'} - TA ${academicYear || ''}`.trim(), 12.5, 'F3', TEXT, 'center', PAGE_W));
+  function drawHeader(content, programStudy, cohort, institution, semester, academicYear) {
+    content.push(text(0, 27, 'Jadwal Perkuliahan', 17, 'F3', TEXT, 'center', PAGE_W));
+    content.push(text(0, 57, programStudy || 'Program Studi', 15.5, 'F3', TEXT, 'center', PAGE_W));
+    content.push(text(0, 82, cohort ? `Angkatan ${cohort}` : 'Angkatan -', 12.5, 'F3', TEXT, 'center', PAGE_W));
+    content.push(text(0, 108, institution || 'Universitas Duta Bangsa Surakarta', 13.5, 'F3', TEXT, 'center', PAGE_W));
+    content.push(text(0, 134, `${semester || 'Semester 1'} - TA ${academicYear || ''}`.trim(), 11.8, 'F3', TEXT, 'center', PAGE_W));
   }
 
   function drawTableHeader(content, top, widths) {
@@ -191,15 +206,16 @@
     drawLines(content, x, top, widths[6], model.roomLines, model, { align: 'center' });
   }
 
-  function drawFooter(content, programStudy, academicYear, pageNo, totalPages) {
-    const left = `Sekolah Pascasarjana UDB | Program Studi ${programStudy || '-'} | Jadwal Rinci OBE ${academicYear || ''}`;
+  function drawFooter(content, programStudy, cohort, academicYear, pageNo, totalPages) {
+    const cohortText = cohort ? ` | Angkatan ${cohort}` : '';
+    const left = `Sekolah Pascasarjana UDB | Program Studi ${programStudy || '-'}${cohortText} | Jadwal Rinci OBE ${academicYear || ''}`;
     content.push(text(0, FOOTER_Y, left, 6.6, 'F1', MUTED, 'center', PAGE_W));
     if (totalPages > 1) content.push(text(PAGE_W - 52, FOOTER_Y, `${pageNo}/${totalPages}`, 6.6, 'F1', MUTED, 'right', 38));
   }
 
   function buildPages(input) {
     const settings = input.settings || {};
-    const rows = Array.isArray(input.schedules) ? input.schedules : [];
+    const rows = Array.isArray(input.schedules) ? [...input.schedules].sort(comparePdfRows) : [];
     const widths = [48, 102, 64, 245, 40, 273, 50];
     const models = rows.map((row) => ({ row, model: rowModel(row, widths) }));
     const pages = [];
@@ -209,7 +225,7 @@
 
     function startPage() {
       current = [];
-      drawHeader(current, input.programStudy, settings.institution, settings.semester, settings.academicYear);
+      drawHeader(current, input.programStudy, input.cohort, settings.institution, settings.semester, settings.academicYear);
       y = drawTableHeader(current, TABLE_TOP, widths);
       pages.push(current);
     }
@@ -231,7 +247,7 @@
     }
 
     const totalPages = pages.length;
-    pages.forEach((page, index) => drawFooter(page, input.programStudy, settings.academicYear, index + 1, totalPages));
+    pages.forEach((page, index) => drawFooter(page, input.programStudy, input.cohort, settings.academicYear, index + 1, totalPages));
     return pages.map((ops) => ops.join(''));
   }
 
