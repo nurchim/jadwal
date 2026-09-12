@@ -19,6 +19,7 @@
         </div>
       </div>
       <div class="header-actions">
+        <button class="btn btn-header" id="btnPdf" type="button">Unduh PDF Jadwal</button>
         <button class="btn btn-header" id="btnPrint" type="button">Cetak Plot</button>
         <button class="btn btn-header" id="btnExport" type="button">Backup Data</button>
       </div>
@@ -46,7 +47,8 @@
       <button class="tab" data-tab="master" type="button">2. Data Dosen & Ruang</button>
       <button class="tab" data-tab="lecturer-detail" type="button">3. Detail Dosen</button>
       <button class="tab" data-tab="plot" type="button">4. Plot Jumat–Sabtu</button>
-      <button class="tab" data-tab="backup" type="button">5. Backup</button>
+      <button class="tab" data-tab="pdf" type="button">5. Unduh PDF</button>
+      <button class="tab" data-tab="backup" type="button">6. Backup</button>
     </nav>
 
     <section class="tab-panel active" id="tab-schedule">
@@ -63,19 +65,39 @@
 
             <div class="form-grid two">
               <label>
-                Nama Mata Kuliah <span class="required">*</span>
-                <input id="courseName" type="text" placeholder="Contoh: Sistem Informasi Manajemen" required maxlength="120" />
+                Kode Mata Kuliah <span class="required">*</span>
+                <input id="courseCode" type="text" placeholder="Contoh: MTI26101" required maxlength="40" />
               </label>
               <label>
                 Program Studi <span class="required">*</span>
-                <input id="programStudy" type="text" placeholder="Contoh: Magister Manajemen" required maxlength="100" />
+                <select id="programStudy" required>
+                  <option value="">Pilih program studi</option>
+                  <option value="Magister Teknologi Informasi">Magister Teknologi Informasi</option>
+                  <option value="Magister Manajemen">Magister Manajemen</option>
+                  <option value="Magister Hukum">Magister Hukum</option>
+                </select>
               </label>
             </div>
 
             <div class="form-grid two">
               <label>
+                Nama Mata Kuliah <span class="required">*</span>
+                <input id="courseName" type="text" placeholder="Contoh: Kecerdasan Artifisial" required maxlength="140" />
+              </label>
+              <label>
+                Nama Mata Kuliah (Inggris) <span class="optional">(opsional)</span>
+                <input id="courseNameEn" type="text" placeholder="Contoh: Artificial Intelligence" maxlength="160" />
+              </label>
+            </div>
+
+            <p class="field-help">Program Studi dipilih dari daftar tetap agar penulisan konsisten pada jadwal dan PDF.</p>
+
+            <div class="form-grid two">
+              <label>
                 Angkatan <span class="required">*</span>
-                <input id="cohort" type="text" placeholder="Contoh: 2026" required maxlength="50" />
+                <select id="cohort" required>
+                  <option value="">Pilih angkatan</option>
+                </select>
               </label>
               <label>
                 Hari <span class="required">*</span>
@@ -237,6 +259,48 @@
       </article>
     </section>
 
+
+    <section class="tab-panel" id="tab-pdf">
+      <div class="panel-grid pdf-grid">
+        <article class="card">
+          <div class="card-heading">
+            <p class="step-label">FORMAT PDF JADWAL</p>
+            <h2>Identitas Dokumen</h2>
+            <p>Format mengikuti contoh terlampir: judul terpusat dan tabel Hari, Jam, Kode, Mata Kuliah, SKS, Dosen Pengampu, dan Ruang.</p>
+          </div>
+          <form id="pdfSettingsForm" class="pdf-settings-form">
+            <label>
+              Nama Institusi <span class="required">*</span>
+              <input id="pdfInstitution" type="text" required maxlength="140" />
+            </label>
+            <div class="form-grid two pdf-setting-row">
+              <label>
+                Semester <span class="required">*</span>
+                <input id="pdfSemester" type="text" placeholder="Contoh: Semester 1" required maxlength="60" />
+              </label>
+              <label>
+                Tahun Akademik <span class="required">*</span>
+                <input id="pdfAcademicYear" type="text" placeholder="Contoh: 2026/2027" required maxlength="40" />
+              </label>
+            </div>
+            <button class="btn btn-secondary" type="submit">Simpan Identitas PDF</button>
+          </form>
+          <div class="pdf-help">
+            <b>Catatan:</b> PDF dibuat langsung di browser tanpa database dan tanpa mengirim data ke server. Setiap file hanya berisi jadwal dari satu program studi.
+          </div>
+        </article>
+
+        <article class="card">
+          <div class="card-heading">
+            <p class="step-label">PDF PER PROGRAM STUDI</p>
+            <h2>Unduh Jadwal</h2>
+            <p>Pilih tombol pada program studi yang diinginkan. Jadwal otomatis diurutkan Jumat lalu Sabtu berdasarkan jam mulai.</p>
+          </div>
+          <div id="pdfProgramList" class="pdf-program-list"></div>
+        </article>
+      </div>
+    </section>
+
     <section class="tab-panel" id="tab-backup">
       <div class="panel-grid">
         <article class="card">
@@ -277,6 +341,7 @@
 
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
   <footer class="footer">Plotting Jadwal Perkuliahan Jumat–Sabtu • Tanpa Database • Data tersimpan pada perangkat</footer>
+  <script src="pdf-generator.js"></script>
   <script src="app.js"></script>
 </body>
 </html>
