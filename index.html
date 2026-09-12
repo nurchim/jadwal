@@ -15,7 +15,7 @@
         <div>
           <p class="eyebrow">PENJADWALAN PERKULIAHAN</p>
           <h1>Plotting Jadwal Jumat & Sabtu</h1>
-          <p class="subtitle">Mudah digunakan, tanpa database, dan otomatis mencegah bentrok dosen maupun ruang.</p>
+          <p class="subtitle">Mudah digunakan, tanpa database, dengan validasi bentrok yang memahami pembagian tim teaching sebelum dan sesudah UTS.</p>
         </div>
       </div>
       <div class="header-actions">
@@ -135,12 +135,13 @@
 
             <fieldset class="lecturer-fieldset">
               <legend>Dosen Pengampu <span class="required">*</span></legend>
-              <p class="field-help">Satu jadwal dapat diampu lebih dari satu dosen. Centang semua dosen yang mengajar bersama.</p>
+              <p class="field-help"><b>Aturan tim teaching:</b> urutan dosen menentukan periode mengajar. <b>Dosen 1</b> mengajar sampai dengan UTS, sedangkan <b>Dosen 2</b> mengajar setelah UTS sampai dengan UAS. Jika hanya satu dosen, dosen tersebut dianggap mengajar sepanjang semester.</p>
               <div class="lecturer-toolbar">
                 <input id="lecturerSearch" type="search" placeholder="Cari nama dosen..." aria-label="Cari nama dosen" />
                 <button class="btn btn-small btn-secondary" id="btnClearLecturers" type="button">Kosongkan Pilihan</button>
               </div>
               <div id="lecturerChoices" class="lecturer-choices"></div>
+              <div id="lecturerOrder" class="lecturer-order" aria-live="polite"></div>
             </fieldset>
 
             <label class="notes-label">
