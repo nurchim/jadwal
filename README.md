@@ -1,6 +1,14 @@
-# Plotting Jadwal Perkuliahan Jumat & Sabtu — V8
+# Plotting Jadwal Perkuliahan Jumat & Sabtu — V9
 
 Aplikasi web statis untuk menyusun plotting jadwal perkuliahan program magister khusus **Jumat dan Sabtu**. Tidak memakai database; seluruh data disimpan pada browser menggunakan `localStorage`.
+
+## Pembaruan V9 — PDF Dipisah per Program Studi dan Angkatan
+
+Menu **Unduh PDF** sekarang mengelompokkan jadwal dalam dua tingkat: **Program Studi → Angkatan**. Setiap tombol unduh menghasilkan satu PDF untuk satu program studi dan satu angkatan, sehingga jadwal Angkatan 2025, 2026, dan seterusnya tidak tercampur.
+
+Urutan jadwal di dalam PDF dibuat kronologis: **Jumat lebih dulu, Sabtu berikutnya**, kemudian dari **jam mulai paling awal** ke paling akhir. Jika jam mulai sama, aplikasi memakai jam selesai, kode mata kuliah, lalu nama mata kuliah sebagai pengurutan lanjutan agar hasil stabil dan rapi. Nama file PDF juga memuat angkatan, misalnya `jadwal-magister-teknologi-informasi-angkatan-2025-2026-2027.pdf`.
+
+Header dan footer PDF menampilkan **Angkatan** agar file yang sudah diunduh mudah dibedakan. Semua fitur V8, termasuk ruang online dan aturan bentrok tim teaching, tetap dipertahankan.
 
 ## Pembaruan V8 — Ruang Online + Validasi Tim Teaching
 
@@ -120,8 +128,8 @@ plotting-jadwal-jumat-sabtu-v7/
 ## Update GitHub + Vercel
 
 1. Lakukan **Backup Data** pada aplikasi lama.
-2. Ekstrak paket V8.
-3. Ganti file lama pada repository GitHub dengan file V8.
+2. Ekstrak paket V9.
+3. Ganti file lama pada repository GitHub dengan file V9.
 4. Commit dan push ke GitHub.
 5. Vercel yang sudah terhubung akan melakukan deployment ulang otomatis.
 
