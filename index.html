@@ -39,7 +39,7 @@
       <article class="stat-card"><span>Jumlah Dosen</span><strong id="statLecturers">0</strong></article>
       <article class="stat-card"><span>Jumlah Ruang</span><strong id="statRooms">0</strong></article>
       <article class="stat-card"><span>Jadwal Tersimpan</span><strong id="statSchedules">0</strong></article>
-      <article class="stat-card"><span>Sesi Terisi</span><strong id="statFilledSessions">0</strong></article>
+      <article class="stat-card"><span>SKS Terjadwal</span><strong id="statFilledSessions">0</strong></article>
     </section>
 
     <nav class="tabs" aria-label="Menu utama">
@@ -57,7 +57,7 @@
           <div class="card-heading">
             <p class="step-label">INPUT JADWAL</p>
             <h2 id="scheduleFormTitle">Tambah Jadwal Perkuliahan</h2>
-            <p>Pilih hari, sesi mulai, lalu tentukan sesi selesai atau jumlah SKS. Ketentuan: 1 SKS = 50 menit = 1 sesi.</p>
+            <p>Pilih hari dan jam mulai secara bebas, lalu isi jam selesai atau jumlah SKS. Ketentuan: 1 SKS = 50 menit = 1 sesi.</p>
           </div>
 
           <form id="scheduleForm" autocomplete="off">
@@ -111,25 +111,20 @@
 
             <div class="form-grid three">
               <label>
-                Sesi Mulai <span class="required">*</span>
-                <select id="sessionSelect" required disabled>
-                  <option value="">Pilih hari terlebih dahulu</option>
-                </select>
+                Jam Mulai <span class="required">*</span>
+                <input id="startTime" type="time" step="60" required />
               </label>
               <label>
-                Sesi Selesai <span class="required">*</span>
-                <select id="endSessionSelect" required disabled>
-                  <option value="">Pilih sesi mulai terlebih dahulu</option>
-                </select>
+                Jam Selesai <span class="optional">(otomatis / dapat diisi)</span>
+                <input id="endTime" type="time" step="60" />
               </label>
               <label>
-                Jumlah SKS <span class="required">*</span>
-                <select id="sksSelect" required disabled>
-                  <option value="">Pilih sesi mulai terlebih dahulu</option>
-                </select>
+                Jumlah SKS <span class="optional">(otomatis / dapat diisi)</span>
+                <input id="sksInput" type="number" min="1" max="12" step="1" inputmode="numeric" placeholder="Contoh: 3" />
               </label>
             </div>
-            <p class="field-help duration-help"><b>Aturan durasi:</b> 1 SKS = 50 menit = 1 sesi pada template. Anda dapat memilih <b>Sesi Selesai</b> atau <b>Jumlah SKS</b>; keduanya akan menyesuaikan otomatis.</p>
+            <p class="field-help duration-help"><b>Aturan durasi:</b> Jam mulai dapat diisi bebas. Isi <b>Jam Selesai</b> atau <b>Jumlah SKS</b>; aplikasi menghitung pasangannya otomatis dengan ketentuan <b>1 SKS = 50 menit = 1 sesi</b>. Contoh: mulai 16.15 + 3 SKS → selesai 18.45.</p>
+            <div id="durationSummary" class="duration-summary" aria-live="polite">Masukkan jam mulai, lalu isi jam selesai atau jumlah SKS.</div>
 
             <div class="form-grid one">
               <label>
@@ -251,7 +246,7 @@
           <div>
             <p class="step-label">PLOTTING SESUAI TEMPLATE</p>
             <h2>Plot Jadwal Jumat & Sabtu</h2>
-            <p>Baris menunjukkan sesi waktu dan kolom menunjukkan ruang. Sabtu memiliki baris istirahat 18.10–18.30.</p>
+            <p>Baris waktu dibuat otomatis dari jam mulai dan jam selesai jadwal yang tersimpan, sehingga plotting mengikuti waktu dinamis yang Anda inputkan.</p>
           </div>
           <button class="btn btn-secondary" id="btnPrintPlot" type="button">Cetak Plot</button>
         </div>
