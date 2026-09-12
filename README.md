@@ -1,8 +1,8 @@
-# Plotting Jadwal Perkuliahan Jumat & Sabtu — V7
+# Plotting Jadwal Perkuliahan Jumat & Sabtu — V8
 
 Aplikasi web statis untuk menyusun plotting jadwal perkuliahan program magister khusus **Jumat dan Sabtu**. Tidak memakai database; seluruh data disimpan pada browser menggunakan `localStorage`.
 
-## Pembaruan V7 — Validasi Bentrok Tim Teaching
+## Pembaruan V8 — Ruang Online + Validasi Tim Teaching
 
 Validasi bentrok dosen sekarang memahami pembagian periode mengajar berdasarkan **urutan dosen** pada setiap mata kuliah.
 
@@ -49,9 +49,15 @@ Operator dapat:
 
 Urutan ini disimpan bersama jadwal dan digunakan oleh validasi bentrok, Detail Dosen, Plot Jumat–Sabtu, serta urutan nama dosen pada PDF.
 
-## Validasi ruang tetap berlaku
+## Validasi ruang fisik dan ruang online
 
-Aturan tim teaching hanya mengubah validasi **dosen**. Ruang tetap tidak boleh digunakan oleh dua mata kuliah pada hari dan rentang jam yang tumpang tindih.
+Aturan bentrok ruang dibedakan berdasarkan jenis ruang:
+
+- **Ruang Fisik** tetap tidak boleh digunakan oleh dua mata kuliah pada hari dan rentang jam yang tumpang tindih.
+- **Ruang Online** boleh digunakan oleh beberapa mata kuliah pada waktu yang sama karena tidak memakai kelas fisik.
+- Untuk jadwal online, setiap jadwal wajib memiliki **link Google Meet/Zoom**.
+- Jika dua jadwal online pada waktu yang sama memakai **link yang sama**, aplikasi menyatakan bentrok.
+- Jika link Google Meet/Zoom **berbeda**, jadwal online tidak dianggap bentrok.
 
 ## Jam dan SKS dinamis
 
@@ -114,8 +120,8 @@ plotting-jadwal-jumat-sabtu-v7/
 ## Update GitHub + Vercel
 
 1. Lakukan **Backup Data** pada aplikasi lama.
-2. Ekstrak paket V7.
-3. Ganti file lama pada repository GitHub dengan file V7.
+2. Ekstrak paket V8.
+3. Ganti file lama pada repository GitHub dengan file V8.
 4. Commit dan push ke GitHub.
 5. Vercel yang sudah terhubung akan melakukan deployment ulang otomatis.
 
@@ -124,3 +130,16 @@ Tidak diperlukan Node.js, build command, backend, database, atau environment var
 ## Penyimpanan data
 
 Data hanya berada pada browser/perangkat melalui `localStorage`. Data tidak otomatis sinkron antar komputer. Gunakan fitur **Backup Data** dan **Impor Backup** untuk memindahkan atau mengamankan data.
+
+
+## V8 — Ruang Online dan Validasi Link Meeting
+
+Pada versi V8, data ruang memiliki jenis **Ruang Fisik** atau **Ruang Online**. Aturan bentrok diperbarui sebagai berikut:
+
+- Ruang fisik yang sama tetap tidak boleh dipakai oleh dua jadwal dengan waktu yang tumpang tindih.
+- Ruang online tidak dianggap bentrok hanya karena nama/mode ruangnya sama.
+- Setiap jadwal online wajib mengisi URL Google Meet atau Zoom.
+- Dua jadwal online pada waktu yang sama **boleh** berjalan jika URL meeting berbeda.
+- Dua jadwal online pada waktu yang sama dengan URL meeting yang sama akan ditolak sebagai **bentrok link online**.
+- Validasi dosen tim teaching tetap mengikuti aturan V7: dosen urutan 1 sampai UTS, dosen urutan 2 setelah UTS sampai UAS.
+- Data V7 dan versi sebelumnya dimigrasikan otomatis. Ruang lama dianggap ruang fisik, kecuali namanya mengandung penanda seperti Online/Zoom/Google Meet. Saat migrasi dari versi lama, aplikasi menambahkan satu pilihan ruang **Online** jika belum tersedia.
