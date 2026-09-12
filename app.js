@@ -1,10 +1,10 @@
 (() => {
   'use strict';
 
-  const STORAGE_KEY = 'plottingJadwalJumatSabtu_v8';
-  const PREVIOUS_STORAGE_KEYS = ['plottingJadwalJumatSabtu_v7', 'plottingJadwalJumatSabtu_v6', 'plottingJadwalJumatSabtu_v5', 'plottingJadwalJumatSabtu_v4', 'plottingJadwalJumatSabtu_v3', 'plottingJadwalJumatSabtu_v2'];
+  const STORAGE_KEY = 'plottingJadwalJumatSabtu_v9';
+  const PREVIOUS_STORAGE_KEYS = ['plottingJadwalJumatSabtu_v8', 'plottingJadwalJumatSabtu_v7', 'plottingJadwalJumatSabtu_v6', 'plottingJadwalJumatSabtu_v5', 'plottingJadwalJumatSabtu_v4', 'plottingJadwalJumatSabtu_v3', 'plottingJadwalJumatSabtu_v2'];
   const LEGACY_STORAGE_KEY = 'plottingJadwalKuliah_v1';
-  const DATA_VERSION = 8;
+  const DATA_VERSION = 9;
 
   const PROGRAM_STUDIES = [
     'Magister Teknologi Informasi',
@@ -201,7 +201,7 @@
     els.pdfSettingsForm.addEventListener('submit', savePdfSettings);
     els.pdfProgramList.addEventListener('click', (event) => {
       const button = event.target.closest('[data-pdf-program]');
-      if (button) downloadProgramPdf(button.dataset.pdfProgram);
+      if (button) downloadProgramPdf(button.dataset.pdfProgram, button.dataset.pdfCohort);
     });
     els.btnPrint.addEventListener('click', printPlot);
     els.btnPrintPlot.addEventListener('click', printPlot);
@@ -1155,16 +1155,24 @@
   }
 
   function scheduleSortValue(schedule) {
-    const dayOrder = schedule.day === 'Jumat' ? 0 : 1;
+    const dayRanks = { Jumat: 0, Sabtu: 1 };
+    const dayOrder = Object.prototype.hasOwnProperty.call(dayRanks, schedule.day) ? dayRanks[schedule.day] : 9;
     const start = timeToMinutes(schedule.startTime);
     return dayOrder * 10000 + (Number.isFinite(start) ? start : 9999);
+  }
+
+  function compareSchedulesChronologically(a, b) {
+    return scheduleSortValue(a) - scheduleSortValue(b)
+      || timeToMinutes(a.endTime) - timeToMinutes(b.endTime)
+      || String(a.courseCode || '').localeCompare(String(b.courseCode || ''), 'id', { numeric: true, sensitivity: 'base' })
+      || String(a.courseName || '').localeCompare(String(b.courseName || ''), 'id', { sensitivity: 'base' });
   }
 
   function renderScheduleList() {
     const filter = els.filterDay.value || 'Semua';
     const list = [...data.schedules]
       .filter((schedule) => filter === 'Semua' || schedule.day === filter)
-      .sort((a, b) => scheduleSortValue(a) - scheduleSortValue(b) || a.courseName.localeCompare(b.courseName, 'id'));
+      .sort(compareSchedulesChronologically);
 
     if (!list.length) {
       els.scheduleList.innerHTML = '<div class="empty-state"><strong>Belum ada jadwal pada pilihan ini.</strong>Isi formulir di sebelah kiri untuk mulai membuat plotting.</div>';
@@ -1231,7 +1239,7 @@
 
     const schedules = data.schedules
       .filter((schedule) => schedule.lecturerIds.includes(lecturerId))
-      .sort((a, b) => scheduleSortValue(a) - scheduleSortValue(b));
+      .sort(compareSchedulesChronologically);
     const courses = new Set(schedules.map((schedule) => schedule.courseName.toLocaleLowerCase('id'))).size;
     const programs = new Set(schedules.map((schedule) => schedule.programStudy.toLocaleLowerCase('id'))).size;
 
@@ -1282,7 +1290,7 @@
     const header = rooms.map((room) => `<th>${escapeHtml(room.name)}</th>`).join('');
     const daySchedules = data.schedules
       .filter((schedule) => schedule.day === day && Number.isFinite(timeToMinutes(schedule.startTime)) && Number.isFinite(timeToMinutes(schedule.endTime)))
-      .sort((a, b) => scheduleSortValue(a) - scheduleSortValue(b));
+      .sort(compareSchedulesChronologically);
 
     if (!daySchedules.length) {
       return `
@@ -1396,28 +1404,58 @@
 
     const groups = new Map();
     data.schedules.forEach((schedule) => {
-      const name = normalizeText(schedule.programStudy);
-      if (!name) return;
-      const key = name.toLocaleLowerCase('id');
-      if (!groups.has(key)) groups.set(key, { name, schedules: [] });
-      groups.get(key).schedules.push(schedule);
+      const programStudy = normalizeText(schedule.programStudy);
+      const cohort = normalizeText(schedule.cohort);
+      if (!programStudy || !cohort) return;
+      const programKey = programStudy.toLocaleLowerCase('id');
+      if (!groups.has(programKey)) groups.set(programKey, { name: programStudy, cohorts: new Map() });
+      const program = groups.get(programKey);
+      if (!program.cohorts.has(cohort)) program.cohorts.set(cohort, []);
+      program.cohorts.get(cohort).push(schedule);
     });
-    const programs = [...groups.values()].sort((a, b) => a.name.localeCompare(b.name, 'id', { sensitivity: 'base' }));
+
+    const programRank = new Map(PROGRAM_STUDIES.map((name, index) => [name.toLocaleLowerCase('id'), index]));
+    const programs = [...groups.values()].sort((a, b) => {
+      const rankA = programRank.get(a.name.toLocaleLowerCase('id')) ?? 999;
+      const rankB = programRank.get(b.name.toLocaleLowerCase('id')) ?? 999;
+      return rankA - rankB || a.name.localeCompare(b.name, 'id', { sensitivity: 'base' });
+    });
+
     if (!programs.length) {
-      els.pdfProgramList.innerHTML = '<div class="empty-state"><strong>Belum ada program studi yang dapat diekspor.</strong>Tambahkan jadwal terlebih dahulu pada menu Buat Jadwal.</div>';
+      els.pdfProgramList.innerHTML = '<div class="empty-state"><strong>Belum ada program studi dan angkatan yang dapat diekspor.</strong>Tambahkan jadwal terlebih dahulu pada menu Buat Jadwal.</div>';
       return;
     }
 
-    els.pdfProgramList.innerHTML = programs.map((group) => {
-      const missingCode = group.schedules.filter((schedule) => !schedule.courseCode).length;
-      const totalSks = group.schedules.reduce((sum, schedule) => sum + (Number(schedule.sks) || 0), 0);
-      return `<div class="pdf-program-item">
-        <div>
-          <div class="pdf-program-name">${escapeHtml(group.name)}</div>
-          <div class="pdf-program-meta">${group.schedules.length} mata kuliah • ${totalSks} SKS${missingCode ? ` • <span class="warning-text">${missingCode} kode mata kuliah belum diisi</span>` : ''}</div>
+    els.pdfProgramList.innerHTML = programs.map((program) => {
+      const cohorts = [...program.cohorts.entries()].sort(([cohortA], [cohortB]) => {
+        const numA = Number.parseInt(cohortA, 10);
+        const numB = Number.parseInt(cohortB, 10);
+        if (Number.isFinite(numA) && Number.isFinite(numB)) return numA - numB;
+        return cohortA.localeCompare(cohortB, 'id', { numeric: true, sensitivity: 'base' });
+      });
+
+      const cohortItems = cohorts.map(([cohort, schedules]) => {
+        const ordered = [...schedules].sort(compareSchedulesChronologically);
+        const missingCode = ordered.filter((schedule) => !schedule.courseCode).length;
+        const totalSks = ordered.reduce((sum, schedule) => sum + (Number(schedule.sks) || 0), 0);
+        const firstSchedule = ordered[0];
+        const firstLabel = firstSchedule ? `${firstSchedule.day}, ${displayTime(firstSchedule.startTime, firstSchedule.endTime)}` : '-';
+        return `<div class="pdf-cohort-item">
+          <div class="pdf-cohort-info">
+            <div class="pdf-cohort-name">Angkatan ${escapeHtml(cohort)}</div>
+            <div class="pdf-program-meta">${ordered.length} mata kuliah • ${totalSks} SKS • mulai ${escapeHtml(firstLabel)}${missingCode ? ` • <span class="warning-text">${missingCode} kode mata kuliah belum diisi</span>` : ''}</div>
+          </div>
+          <button class="btn btn-primary btn-small" type="button" data-pdf-program="${escapeHtml(program.name)}" data-pdf-cohort="${escapeHtml(cohort)}">Unduh PDF Angkatan ${escapeHtml(cohort)}</button>
+        </div>`;
+      }).join('');
+
+      return `<section class="pdf-program-group">
+        <div class="pdf-program-group-header">
+          <div class="pdf-program-name">${escapeHtml(program.name)}</div>
+          <div class="pdf-program-meta">${cohorts.length} angkatan tersedia</div>
         </div>
-        <button class="btn btn-primary btn-small" type="button" data-pdf-program="${escapeHtml(group.name)}">Unduh PDF</button>
-      </div>`;
+        <div class="pdf-cohort-list">${cohortItems}</div>
+      </section>`;
     }).join('');
   }
 
@@ -1426,16 +1464,18 @@
     return `${schedule.startTime.replace(':', '.')}-${schedule.endTime.replace(':', '.')} WIB`;
   }
 
-  function downloadProgramPdf(programStudy) {
+  function downloadProgramPdf(programStudy, cohort) {
     if (!globalThis.SchedulePdf || typeof globalThis.SchedulePdf.buildPdf !== 'function') {
       showToast('Modul pembuat PDF tidak dapat dimuat.', 'error');
       return;
     }
+    const normalizedProgram = String(programStudy || '').toLocaleLowerCase('id');
+    const normalizedCohort = normalizeText(cohort);
     const schedules = data.schedules
-      .filter((schedule) => schedule.programStudy.toLocaleLowerCase('id') === String(programStudy).toLocaleLowerCase('id'))
-      .sort((a, b) => scheduleSortValue(a) - scheduleSortValue(b) || a.courseName.localeCompare(b.courseName, 'id'));
+      .filter((schedule) => schedule.programStudy.toLocaleLowerCase('id') === normalizedProgram && normalizeText(schedule.cohort) === normalizedCohort)
+      .sort(compareSchedulesChronologically);
     if (!schedules.length) {
-      showToast('Jadwal untuk program studi tersebut belum tersedia.', 'error');
+      showToast('Jadwal untuk program studi dan angkatan tersebut belum tersedia.', 'error');
       return;
     }
 
@@ -1459,6 +1499,7 @@
     try {
       const bytes = globalThis.SchedulePdf.buildPdf({
         programStudy,
+        cohort: normalizedCohort,
         settings: data.pdfSettings || defaultPdfSettings(),
         schedules: rows
       });
@@ -1467,13 +1508,14 @@
       const a = document.createElement('a');
       const academic = (data.pdfSettings?.academicYear || '').replace(/[^0-9A-Za-z]+/g, '-').replace(/^-+|-+$/g, '');
       const safeProgram = globalThis.SchedulePdf.safeFilename(programStudy);
+      const safeCohort = globalThis.SchedulePdf.safeFilename(normalizedCohort || 'angkatan');
       a.href = url;
-      a.download = `jadwal-${safeProgram}${academic ? `-${academic}` : ''}.pdf`;
+      a.download = `jadwal-${safeProgram}-angkatan-${safeCohort}${academic ? `-${academic}` : ''}.pdf`;
       document.body.appendChild(a);
       a.click();
       a.remove();
       setTimeout(() => URL.revokeObjectURL(url), 1000);
-      showToast(`PDF ${programStudy} berhasil diunduh.`, 'success');
+      showToast(`PDF ${programStudy} Angkatan ${normalizedCohort} berhasil diunduh.`, 'success');
     } catch (error) {
       console.error(error);
       showToast('PDF gagal dibuat. Periksa data jadwal lalu coba lagi.', 'error');
