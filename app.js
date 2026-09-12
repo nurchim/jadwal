@@ -1,10 +1,10 @@
 (() => {
   'use strict';
 
-  const STORAGE_KEY = 'plottingJadwalJumatSabtu_v5';
-  const PREVIOUS_STORAGE_KEYS = ['plottingJadwalJumatSabtu_v4', 'plottingJadwalJumatSabtu_v3', 'plottingJadwalJumatSabtu_v2'];
+  const STORAGE_KEY = 'plottingJadwalJumatSabtu_v6';
+  const PREVIOUS_STORAGE_KEYS = ['plottingJadwalJumatSabtu_v5', 'plottingJadwalJumatSabtu_v4', 'plottingJadwalJumatSabtu_v3', 'plottingJadwalJumatSabtu_v2'];
   const LEGACY_STORAGE_KEY = 'plottingJadwalKuliah_v1';
-  const DATA_VERSION = 5;
+  const DATA_VERSION = 6;
 
   const PROGRAM_STUDIES = [
     'Magister Teknologi Informasi',
@@ -14,7 +14,7 @@
   const COHORT_START_YEAR = 2025;
   const COHORT_FUTURE_YEARS = 10;
 
-  const SESSIONS = {
+  const LEGACY_SESSIONS = {
     Jumat: [
       { id: 'JMT-1', start: '16:00', end: '16:50' },
       { id: 'JMT-2', start: '16:50', end: '17:40' },
@@ -77,9 +77,10 @@
     programStudy: $('programStudy'),
     cohort: $('cohort'),
     daySelect: $('daySelect'),
-    sessionSelect: $('sessionSelect'),
-    endSessionSelect: $('endSessionSelect'),
-    sksSelect: $('sksSelect'),
+    startTime: $('startTime'),
+    endTime: $('endTime'),
+    sksInput: $('sksInput'),
+    durationSummary: $('durationSummary'),
     roomSelect: $('roomSelect'),
     lecturerChoices: $('lecturerChoices'),
     lecturerSearch: $('lecturerSearch'),
@@ -139,20 +140,17 @@
     els.lecturerForm.addEventListener('submit', onAddLecturer);
     els.roomForm.addEventListener('submit', onAddRoom);
     els.scheduleForm.addEventListener('submit', onSaveSchedule);
-    els.daySelect.addEventListener('change', () => {
-      renderSessionOptions();
+    els.daySelect.addEventListener('change', previewConflict);
+    els.startTime.addEventListener('input', () => {
+      syncDurationFromPreferredSource('start');
       previewConflict();
     });
-    els.sessionSelect.addEventListener('change', () => {
-      renderDurationOptions();
+    els.endTime.addEventListener('input', () => {
+      syncSksFromEndTime();
       previewConflict();
     });
-    els.endSessionSelect.addEventListener('change', () => {
-      syncSksFromEndSession();
-      previewConflict();
-    });
-    els.sksSelect.addEventListener('change', () => {
-      syncEndSessionFromSks();
+    els.sksInput.addEventListener('input', () => {
+      syncEndTimeFromSks();
       previewConflict();
     });
     els.roomSelect.addEventListener('change', previewConflict);
@@ -231,39 +229,87 @@
     return `${start.replace(':', '.')} – ${end.replace(':', '.')}`;
   }
 
-  function sessionById(day, id) {
-    return (SESSIONS[day] || []).find((session) => session.id === id) || null;
+  function timeToMinutes(time) {
+    const match = /^(\d{2}):(\d{2})$/.exec(String(time || ''));
+    if (!match) return NaN;
+    const hours = Number(match[1]);
+    const minutes = Number(match[2]);
+    if (!Number.isInteger(hours) || !Number.isInteger(minutes) || hours < 0 || hours > 23 || minutes < 0 || minutes > 59) return NaN;
+    return hours * 60 + minutes;
   }
 
-  function sessionIndex(day, id) {
-    return (SESSIONS[day] || []).findIndex((session) => session.id === id);
+  function minutesToTime(totalMinutes) {
+    if (!Number.isInteger(totalMinutes) || totalMinutes < 0 || totalMinutes >= 24 * 60) return '';
+    const hours = Math.floor(totalMinutes / 60);
+    const minutes = totalMinutes % 60;
+    return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
   }
 
-  function sessionsForRange(day, startSessionId, endSessionId) {
-    const sessions = SESSIONS[day] || [];
-    const startIndex = sessionIndex(day, startSessionId);
-    const endIndex = sessionIndex(day, endSessionId);
-    if (startIndex < 0 || endIndex < startIndex) return [];
-    return sessions.slice(startIndex, endIndex + 1);
+  function addMinutes(time, amount) {
+    const start = timeToMinutes(time);
+    if (!Number.isFinite(start) || !Number.isInteger(amount)) return '';
+    return minutesToTime(start + amount);
   }
 
-  function scheduleSessions(schedule) {
-    return sessionsForRange(schedule.day, schedule.startSessionId, schedule.endSessionId);
+  function scheduleDurationMinutes(schedule) {
+    const start = timeToMinutes(schedule.startTime);
+    const end = timeToMinutes(schedule.endTime);
+    if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) return 0;
+    return end - start;
   }
 
-  function scheduleCoversSession(schedule, sessionId) {
-    return scheduleSessions(schedule).some((session) => session.id === sessionId);
+  function schedulesOverlap(a, b) {
+    const aStart = timeToMinutes(a.startTime);
+    const aEnd = timeToMinutes(a.endTime);
+    const bStart = timeToMinutes(b.startTime);
+    const bEnd = timeToMinutes(b.endTime);
+    if (![aStart, aEnd, bStart, bEnd].every(Number.isFinite)) return false;
+    return aStart < bEnd && bStart < aEnd;
+  }
+
+  function scheduleCoversSegment(schedule, startMinutes, endMinutes) {
+    const start = timeToMinutes(schedule.startTime);
+    const end = timeToMinutes(schedule.endTime);
+    return Number.isFinite(start) && Number.isFinite(end) && start < endMinutes && startMinutes < end;
   }
 
   function scheduleTimeLabel(schedule) {
-    const sessions = scheduleSessions(schedule);
-    if (!sessions.length) return '-';
-    return displayTime(sessions[0].start, sessions[sessions.length - 1].end);
+    if (!schedule?.startTime || !schedule?.endTime) return '-';
+    return displayTime(schedule.startTime, schedule.endTime);
   }
 
-  function timeToMinutes(time) {
-    const [h, m] = String(time).split(':').map(Number);
-    return h * 60 + m;
+  function legacySessionById(day, id) {
+    return (LEGACY_SESSIONS[day] || []).find((session) => session.id === id) || null;
+  }
+
+  function legacySessionIndex(day, id) {
+    return (LEGACY_SESSIONS[day] || []).findIndex((session) => session.id === id);
+  }
+
+  function legacyTimes(item) {
+    const day = item.day;
+    const sessions = LEGACY_SESSIONS[day] || [];
+    const directStart = String(item.startTime || '');
+    const directEnd = String(item.endTime || '');
+    if (Number.isFinite(timeToMinutes(directStart)) && Number.isFinite(timeToMinutes(directEnd)) && timeToMinutes(directEnd) > timeToMinutes(directStart)) {
+      return { startTime: directStart, endTime: directEnd, sks: Math.max(1, Number.parseInt(item.sks, 10) || 1) };
+    }
+
+    const legacySessionId = item.sessionId || '';
+    const startId = String(item.startSessionId || legacySessionId || '');
+    let endId = String(item.endSessionId || startId || '');
+    const startIndex = legacySessionIndex(day, startId);
+    if (startIndex < 0) return null;
+    let endIndex = legacySessionIndex(day, endId);
+    if (endIndex < startIndex) {
+      const requestedSks = Math.max(1, Number.parseInt(item.sks, 10) || 1);
+      endIndex = Math.min(sessions.length - 1, startIndex + requestedSks - 1);
+      endId = sessions[endIndex]?.id || startId;
+    }
+    const first = legacySessionById(day, startId);
+    const last = legacySessionById(day, endId);
+    if (!first || !last) return null;
+    return { startTime: first.start, endTime: last.end, sks: Math.max(1, Number.parseInt(item.sks, 10) || (endIndex - startIndex + 1)) };
   }
 
   function sortRooms(rooms) {
@@ -302,22 +348,15 @@
 
   function normalizeSchedule(item) {
     const day = item.day;
-    const sessions = SESSIONS[day] || [];
-    const legacySessionId = item.sessionId || sessions.find((session) => session.start === item.startTime && session.end === item.endTime)?.id || '';
-    let startSessionId = String(item.startSessionId || legacySessionId || '');
-    let endSessionId = String(item.endSessionId || '');
-    let startIndex = sessionIndex(day, startSessionId);
+    if (!['Jumat', 'Sabtu'].includes(day)) return null;
 
-    if (startIndex < 0) return null;
+    const resolved = legacyTimes(item);
+    if (!resolved) return null;
 
-    if (sessionIndex(day, endSessionId) < startIndex) {
-      const requestedSks = Math.max(1, Number.parseInt(item.sks, 10) || 1);
-      const endIndexFromSks = Math.min(sessions.length - 1, startIndex + requestedSks - 1);
-      endSessionId = sessions[endIndexFromSks]?.id || startSessionId;
-    }
-
-    const range = sessionsForRange(day, startSessionId, endSessionId);
-    if (!range.length) return null;
+    let { startTime, endTime, sks } = resolved;
+    const elapsed = timeToMinutes(endTime) - timeToMinutes(startTime);
+    if ((!Number.isInteger(sks) || sks < 1) && elapsed > 0 && elapsed % 50 === 0) sks = elapsed / 50;
+    if (!Number.isInteger(sks) || sks < 1) sks = 1;
 
     return {
       id: String(item.id),
@@ -327,9 +366,9 @@
       programStudy: normalizeText(item.programStudy || 'Belum diisi'),
       cohort: normalizeText(item.cohort || item.className || 'Belum diisi'),
       day,
-      startSessionId,
-      endSessionId,
-      sks: range.length,
+      startTime,
+      endTime,
+      sks,
       roomId: String(item.roomId || ''),
       lecturerIds: Array.isArray(item.lecturerIds) ? [...new Set(item.lecturerIds.map(String))] : (item.lecturerId ? [String(item.lecturerId)] : []),
       notes: normalizeText(item.notes),
@@ -376,14 +415,10 @@
       rooms: old?.rooms || [],
       schedules: (old?.schedules || []).map((schedule) => {
         if (!['Jumat', 'Sabtu'].includes(schedule.day)) return null;
-        const matchingSession = (SESSIONS[schedule.day] || []).find((session) => session.start === schedule.startTime && session.end === schedule.endTime);
-        if (!matchingSession) return null;
         return {
           ...schedule,
-          startSessionId: matchingSession.id,
-          endSessionId: matchingSession.id,
-          sks: 1,
-          lecturerIds: schedule.lecturerId ? [schedule.lecturerId] : [],
+          sks: Number.parseInt(schedule.sks, 10) || 1,
+          lecturerIds: schedule.lecturerId ? [schedule.lecturerId] : (schedule.lecturerIds || []),
           programStudy: schedule.programStudy || 'Belum diisi',
           cohort: schedule.cohort || schedule.className || 'Belum diisi'
         };
@@ -479,7 +514,16 @@
   }
 
   function getScheduleFormValue() {
-    const selectedSessions = sessionsForRange(els.daySelect.value, els.sessionSelect.value, els.endSessionSelect.value);
+    const startTime = els.startTime.value;
+    let endTime = els.endTime.value;
+    let sks = Number.parseInt(els.sksInput.value, 10) || 0;
+
+    if (startTime && !endTime && sks > 0) endTime = addMinutes(startTime, sks * 50);
+    if (startTime && endTime && !sks) {
+      const duration = timeToMinutes(endTime) - timeToMinutes(startTime);
+      if (duration > 0 && duration % 50 === 0) sks = duration / 50;
+    }
+
     return {
       id: els.scheduleId.value || uid('schedule'),
       courseCode: normalizeText(els.courseCode.value),
@@ -488,9 +532,9 @@
       programStudy: normalizeText(els.programStudy.value),
       cohort: normalizeText(els.cohort.value),
       day: els.daySelect.value,
-      startSessionId: els.sessionSelect.value,
-      endSessionId: els.endSessionSelect.value,
-      sks: selectedSessions.length || Number.parseInt(els.sksSelect.value, 10) || 0,
+      startTime,
+      endTime,
+      sks,
       roomId: els.roomSelect.value,
       lecturerIds: getSelectedLecturerIds(),
       notes: normalizeText(els.notes.value),
@@ -508,31 +552,39 @@
     else if (!/^\d{4}$/.test(candidate.cohort) || Number(candidate.cohort) < COHORT_START_YEAR) errors.push(`Angkatan harus tahun ${COHORT_START_YEAR} atau setelahnya.`);
     if (!['Jumat', 'Sabtu'].includes(candidate.day)) errors.push('Pilih hari Jumat atau Sabtu.');
 
-    const candidateSessions = sessionsForRange(candidate.day, candidate.startSessionId, candidate.endSessionId);
-    if (!candidate.startSessionId || !sessionById(candidate.day, candidate.startSessionId)) errors.push('Pilih sesi mulai yang tersedia.');
-    if (!candidate.endSessionId || !sessionById(candidate.day, candidate.endSessionId)) errors.push('Pilih sesi selesai yang tersedia.');
-    if (candidate.startSessionId && candidate.endSessionId && !candidateSessions.length) errors.push('Sesi selesai harus sama dengan atau setelah sesi mulai.');
-    if (candidateSessions.length && candidate.sks !== candidateSessions.length) errors.push('Jumlah SKS harus sesuai dengan jumlah sesi. 1 SKS = 1 sesi = 50 menit.');
+    const start = timeToMinutes(candidate.startTime);
+    const end = timeToMinutes(candidate.endTime);
+    if (!Number.isFinite(start)) errors.push('Jam mulai wajib diisi dengan format waktu yang valid.');
+    if (!Number.isFinite(end)) errors.push('Isi jam selesai atau jumlah SKS agar jam selesai dapat dihitung otomatis.');
+
+    let duration = 0;
+    if (Number.isFinite(start) && Number.isFinite(end)) {
+      duration = end - start;
+      if (duration <= 0) errors.push('Jam selesai harus lebih akhir daripada jam mulai pada hari yang sama.');
+      else if (duration % 50 !== 0) errors.push(`Durasi ${duration} menit belum sesuai aturan. Durasi harus kelipatan 50 menit karena 1 SKS = 50 menit.`);
+    }
+
+    if (!Number.isInteger(candidate.sks) || candidate.sks < 1) errors.push('Isi jumlah SKS minimal 1, atau tentukan jam selesai yang menghasilkan kelipatan 50 menit.');
+    else if (candidate.sks > 12) errors.push('Jumlah SKS maksimal 12 untuk satu jadwal.');
+    if (duration > 0 && duration % 50 === 0 && candidate.sks !== duration / 50) errors.push(`Jumlah SKS harus ${duration / 50} karena durasi jadwal ${duration} menit.`);
+
     if (!candidate.roomId || !data.rooms.some((room) => room.id === candidate.roomId)) errors.push('Pilih ruang yang tersedia.');
     if (!candidate.lecturerIds.length) errors.push('Pilih minimal satu dosen pengampu.');
     if (candidate.lecturerIds.some((id) => !data.lecturers.some((lecturer) => lecturer.id === id))) errors.push('Terdapat dosen yang sudah tidak tersedia.');
 
-    if (!candidateSessions.length) return { errors, conflicts: [] };
+    const timeValid = Number.isFinite(start) && Number.isFinite(end) && duration > 0 && duration % 50 === 0 && Number.isInteger(candidate.sks) && candidate.sks >= 1 && candidate.sks <= 12 && candidate.sks === duration / 50;
+    if (!timeValid) return { errors, conflicts: [] };
 
-    const candidateSessionIds = new Set(candidateSessions.map((session) => session.id));
     const conflicts = [];
     for (const existing of data.schedules) {
-      if (existing.id === ignoreId || existing.day !== candidate.day) continue;
-      const existingSessions = scheduleSessions(existing);
-      const overlappingSessions = existingSessions.filter((session) => candidateSessionIds.has(session.id));
-      if (!overlappingSessions.length) continue;
+      if (existing.id === ignoreId || existing.day !== candidate.day || !schedulesOverlap(candidate, existing)) continue;
 
       if (existing.roomId === candidate.roomId) {
-        conflicts.push({ type: 'room', schedule: existing, roomId: candidate.roomId, overlappingSessions });
+        conflicts.push({ type: 'room', schedule: existing, roomId: candidate.roomId });
       }
 
       const lecturerClashes = candidate.lecturerIds.filter((id) => existing.lecturerIds.includes(id));
-      lecturerClashes.forEach((lecturerId) => conflicts.push({ type: 'lecturer', schedule: existing, lecturerId, overlappingSessions }));
+      lecturerClashes.forEach((lecturerId) => conflicts.push({ type: 'lecturer', schedule: existing, lecturerId }));
     }
 
     return { errors, conflicts };
@@ -600,14 +652,15 @@
   }
 
   function previewConflict() {
-    if (!els.daySelect.value || !els.sessionSelect.value || !els.endSessionSelect.value) {
+    updateDurationSummary();
+    if (!els.daySelect.value || !els.startTime.value || (!els.endTime.value && !els.sksInput.value)) {
       els.conflictBox.classList.add('hidden');
       return;
     }
     const candidate = getScheduleFormValue();
     const validation = validateSchedule(candidate, els.scheduleId.value);
-    const relevant = { errors: [], conflicts: validation.conflicts };
-    showConflict(relevant);
+    const timeErrors = validation.errors.filter((message) => /jam|durasi|SKS/i.test(message));
+    showConflict({ errors: timeErrors, conflicts: validation.conflicts });
   }
 
   function editSchedule(id) {
@@ -622,11 +675,10 @@
     renderCohortOptions(schedule.cohort);
     els.cohort.value = schedule.cohort;
     els.daySelect.value = schedule.day;
-    renderSessionOptions();
-    els.sessionSelect.value = schedule.startSessionId;
-    renderDurationOptions();
-    els.endSessionSelect.value = schedule.endSessionId;
-    els.sksSelect.value = String(schedule.sks);
+    els.startTime.value = schedule.startTime || '';
+    els.endTime.value = schedule.endTime || '';
+    els.sksInput.value = String(schedule.sks || '');
+    updateDurationSummary();
     els.roomSelect.value = schedule.roomId;
     els.notes.value = schedule.notes || '';
     els.lecturerSearch.value = '';
@@ -663,7 +715,10 @@
     draftLecturerIds.clear();
     renderCohortOptions();
     els.cohort.value = '';
-    renderSessionOptions();
+    els.startTime.value = '';
+    els.endTime.value = '';
+    els.sksInput.value = '';
+    updateDurationSummary();
     renderLecturerChoices();
     renderRoomOptions();
   }
@@ -673,7 +728,7 @@
     renderLecturerList();
     renderRoomList();
     renderRoomOptions();
-    renderSessionOptions(true);
+    updateDurationSummary();
     renderLecturerChoices(getSelectedLecturerIds());
     renderScheduleList();
     renderDetailLecturerOptions();
@@ -687,11 +742,7 @@
     els.statLecturers.textContent = data.lecturers.length;
     els.statRooms.textContent = data.rooms.length;
     els.statSchedules.textContent = data.schedules.length;
-    const sessionKeys = new Set();
-    data.schedules.forEach((schedule) => {
-      scheduleSessions(schedule).forEach((session) => sessionKeys.add(`${schedule.day}|${session.id}`));
-    });
-    els.statFilledSessions.textContent = sessionKeys.size;
+    els.statFilledSessions.textContent = data.schedules.reduce((sum, schedule) => sum + (Number(schedule.sks) || 0), 0);
   }
 
   function renderLecturerList() {
@@ -759,99 +810,81 @@
     if (rooms.some((room) => room.id === current)) els.roomSelect.value = current;
   }
 
-  function renderSessionOptions(preserve = false) {
-    const day = els.daySelect.value;
-    const currentStart = preserve ? els.sessionSelect.value : '';
-    const currentEnd = preserve ? els.endSessionSelect.value : '';
-    const currentSks = preserve ? els.sksSelect.value : '';
+  function syncDurationFromPreferredSource(source = '') {
+    if (!els.startTime.value) {
+      updateDurationSummary();
+      return;
+    }
+    if (source === 'start' && Number.parseInt(els.sksInput.value, 10) > 0) {
+      syncEndTimeFromSks();
+      return;
+    }
+    if (els.endTime.value) syncSksFromEndTime();
+    else if (els.sksInput.value) syncEndTimeFromSks();
+    updateDurationSummary();
+  }
 
-    if (!day || !SESSIONS[day]) {
-      els.sessionSelect.disabled = true;
-      els.sessionSelect.innerHTML = '<option value="">Pilih hari terlebih dahulu</option>';
-      resetDurationOptions();
+  function syncSksFromEndTime() {
+    const start = timeToMinutes(els.startTime.value);
+    const end = timeToMinutes(els.endTime.value);
+    if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) {
+      if (els.endTime.value) els.sksInput.value = '';
+      updateDurationSummary();
+      return;
+    }
+    const duration = end - start;
+    if (duration % 50 === 0) els.sksInput.value = String(duration / 50);
+    else els.sksInput.value = '';
+    updateDurationSummary();
+  }
+
+  function syncEndTimeFromSks() {
+    const start = els.startTime.value;
+    const sks = Number.parseInt(els.sksInput.value, 10);
+    if (!start || !Number.isInteger(sks) || sks < 1 || sks > 12) {
+      updateDurationSummary();
+      return;
+    }
+    const end = addMinutes(start, sks * 50);
+    els.endTime.value = end;
+    updateDurationSummary();
+  }
+
+  function updateDurationSummary() {
+    if (!els.durationSummary) return;
+    const start = timeToMinutes(els.startTime.value);
+    const end = timeToMinutes(els.endTime.value);
+    const sks = Number.parseInt(els.sksInput.value, 10);
+
+    els.durationSummary.classList.remove('duration-summary-error', 'duration-summary-ok');
+
+    if (!Number.isFinite(start)) {
+      els.durationSummary.textContent = 'Masukkan jam mulai, lalu isi jam selesai atau jumlah SKS.';
       return;
     }
 
-    els.sessionSelect.disabled = false;
-    els.sessionSelect.innerHTML = '<option value="">Pilih sesi mulai</option>' + SESSIONS[day]
-      .map((session, index) => `<option value="${session.id}">Sesi ${index + 1} • ${displayTime(session.start, session.end)}</option>`)
-      .join('');
-
-    if (currentStart && sessionById(day, currentStart)) {
-      els.sessionSelect.value = currentStart;
-      renderDurationOptions(currentEnd, currentSks);
-    } else {
-      resetDurationOptions();
-    }
-  }
-
-  function resetDurationOptions() {
-    els.endSessionSelect.disabled = true;
-    els.endSessionSelect.innerHTML = '<option value="">Pilih sesi mulai terlebih dahulu</option>';
-    els.sksSelect.disabled = true;
-    els.sksSelect.innerHTML = '<option value="">Pilih sesi mulai terlebih dahulu</option>';
-  }
-
-  function renderDurationOptions(preferredEnd = '', preferredSks = '') {
-    const day = els.daySelect.value;
-    const startId = els.sessionSelect.value;
-    const sessions = SESSIONS[day] || [];
-    const startIndex = sessionIndex(day, startId);
-
-    if (startIndex < 0) {
-      resetDurationOptions();
+    if (!Number.isFinite(end)) {
+      els.durationSummary.textContent = 'Jam mulai sudah diisi. Masukkan jam selesai atau jumlah SKS untuk menghitung durasi.';
       return;
     }
 
-    const available = sessions.slice(startIndex);
-    els.endSessionSelect.disabled = false;
-    els.sksSelect.disabled = false;
-
-    els.endSessionSelect.innerHTML = available.map((session, offset) => {
-      const sks = offset + 1;
-      return `<option value="${session.id}">Sesi ${startIndex + offset + 1} • selesai ${session.end.replace(':', '.')} • ${sks} SKS</option>`;
-    }).join('');
-
-    els.sksSelect.innerHTML = available.map((_, offset) => {
-      const sks = offset + 1;
-      return `<option value="${sks}">${sks} SKS • ${sks * 50} menit • ${sks} sesi</option>`;
-    }).join('');
-
-    const preferredEndIndex = sessionIndex(day, preferredEnd);
-    if (preferredEnd && preferredEndIndex >= startIndex) {
-      els.endSessionSelect.value = preferredEnd;
-      syncSksFromEndSession();
+    const duration = end - start;
+    if (duration <= 0) {
+      els.durationSummary.textContent = 'Jam selesai harus lebih akhir daripada jam mulai pada hari yang sama.';
+      els.durationSummary.classList.add('duration-summary-error');
       return;
     }
 
-    const numericSks = Number.parseInt(preferredSks, 10);
-    if (numericSks >= 1 && numericSks <= available.length) {
-      els.sksSelect.value = String(numericSks);
-      syncEndSessionFromSks();
+    if (duration % 50 !== 0) {
+      els.durationSummary.textContent = `Durasi saat ini ${duration} menit. Sesuaikan jam selesai agar durasi menjadi kelipatan 50 menit.`;
+      els.durationSummary.classList.add('duration-summary-error');
       return;
     }
 
-    els.endSessionSelect.value = startId;
-    els.sksSelect.value = '1';
-  }
-
-  function syncSksFromEndSession() {
-    const day = els.daySelect.value;
-    const startIndex = sessionIndex(day, els.sessionSelect.value);
-    const endIndex = sessionIndex(day, els.endSessionSelect.value);
-    if (startIndex < 0 || endIndex < startIndex) return;
-    els.sksSelect.value = String(endIndex - startIndex + 1);
-  }
-
-  function syncEndSessionFromSks() {
-    const day = els.daySelect.value;
-    const sessions = SESSIONS[day] || [];
-    const startIndex = sessionIndex(day, els.sessionSelect.value);
-    const sks = Number.parseInt(els.sksSelect.value, 10);
-    if (startIndex < 0 || !Number.isInteger(sks) || sks < 1) return;
-    const endIndex = startIndex + sks - 1;
-    if (!sessions[endIndex]) return;
-    els.endSessionSelect.value = sessions[endIndex].id;
+    const calculatedSks = duration / 50;
+    els.durationSummary.textContent = `${displayTime(els.startTime.value, els.endTime.value)} • ${calculatedSks} SKS • ${duration} menit • ${calculatedSks} sesi.`;
+    els.durationSummary.classList.add('duration-summary-ok');
+    if (sks !== calculatedSks) els.sksInput.value = String(calculatedSks);
   }
 
   function renderLecturerChoices(forceSelectedIds = null) {
@@ -880,8 +913,8 @@
 
   function scheduleSortValue(schedule) {
     const dayOrder = schedule.day === 'Jumat' ? 0 : 1;
-    const session = sessionById(schedule.day, schedule.startSessionId);
-    return dayOrder * 10000 + (session ? timeToMinutes(session.start) : 9999);
+    const start = timeToMinutes(schedule.startTime);
+    return dayOrder * 10000 + (Number.isFinite(start) ? start : 9999);
   }
 
   function renderScheduleList() {
@@ -996,27 +1029,53 @@
 
   function buildPlotTable(day, rooms) {
     const header = rooms.map((room) => `<th>${escapeHtml(room.name)}</th>`).join('');
-    const rows = [];
+    const daySchedules = data.schedules
+      .filter((schedule) => schedule.day === day && Number.isFinite(timeToMinutes(schedule.startTime)) && Number.isFinite(timeToMinutes(schedule.endTime)))
+      .sort((a, b) => scheduleSortValue(a) - scheduleSortValue(b));
 
-    SESSIONS[day].forEach((session, index) => {
-      if (day === 'Sabtu' && index === 5) {
-        rows.push(`<tr class="break-row"><td colspan="${rooms.length + 1}">ISTIRAHAT 18.10 – 18.30</td></tr>`);
-      }
+    if (!daySchedules.length) {
+      return `
+        <section class="plot-section">
+          <div class="plot-section-title">
+            <h3>${day.toUpperCase()}</h3>
+            <span>Belum ada jadwal</span>
+          </div>
+          <div class="table-scroll">
+            <table class="plot-table">
+              <thead><tr><th class="time-col">${day.toUpperCase()}</th>${header}</tr></thead>
+              <tbody><tr><td colspan="${rooms.length + 1}" class="plot-empty-row">Belum ada jadwal ${day}.</td></tr></tbody>
+            </table>
+          </div>
+        </section>`;
+    }
 
+    const boundaries = [...new Set(daySchedules.flatMap((schedule) => [timeToMinutes(schedule.startTime), timeToMinutes(schedule.endTime)]))]
+      .filter(Number.isFinite)
+      .sort((a, b) => a - b);
+    const segments = [];
+    for (let index = 0; index < boundaries.length - 1; index += 1) {
+      const start = boundaries[index];
+      const end = boundaries[index + 1];
+      if (end <= start) continue;
+      if (daySchedules.some((schedule) => scheduleCoversSegment(schedule, start, end))) segments.push({ start, end });
+    }
+
+    const rows = segments.map((segment) => {
+      const startTime = minutesToTime(segment.start);
+      const endTime = minutesToTime(segment.end);
       const cells = rooms.map((room) => {
-        const schedules = data.schedules.filter((schedule) => schedule.day === day && scheduleCoversSession(schedule, session.id) && schedule.roomId === room.id);
+        const schedules = daySchedules.filter((schedule) => schedule.roomId === room.id && scheduleCoversSegment(schedule, segment.start, segment.end));
         if (!schedules.length) return '<td></td>';
         return `<td class="occupied">${schedules.map((schedule) => buildPlotEntry(schedule)).join('')}</td>`;
       }).join('');
-
-      rows.push(`<tr><td class="time-col">${escapeHtml(displayTime(session.start, session.end))}</td>${cells}</tr>`);
+      return `<tr><td class="time-col">${escapeHtml(displayTime(startTime, endTime))}</td>${cells}</tr>`;
     });
 
     return `
       <section class="plot-section">
         <div class="plot-section-title">
           <h3>${day.toUpperCase()}</h3>
-          <span>${SESSIONS[day].length} sesi perkuliahan</span>
+          <span>${daySchedules.length} jadwal • waktu dinamis</span>
         </div>
         <div class="table-scroll">
           <table class="plot-table">
@@ -1034,7 +1093,7 @@
     return `
       <div class="plot-entry">
         <div class="plot-course">${schedule.courseCode ? `${escapeHtml(schedule.courseCode)} • ` : ``}${escapeHtml(schedule.courseName)}</div>
-        <div class="plot-class">${escapeHtml(schedule.programStudy)} • Angkatan ${escapeHtml(schedule.cohort)} • ${schedule.sks} SKS</div>
+        <div class="plot-class">${escapeHtml(scheduleTimeLabel(schedule))} • ${escapeHtml(schedule.programStudy)} • Angkatan ${escapeHtml(schedule.cohort)} • ${schedule.sks} SKS</div>
         <div class="plot-lecturers">${lecturers.map((name, index) => `${index + 1}. ${escapeHtml(name)}`).join('<br>')}</div>
       </div>`;
   }
@@ -1108,9 +1167,8 @@
   }
 
   function pdfTimeLabel(schedule) {
-    const sessions = scheduleSessions(schedule);
-    if (!sessions.length) return '-';
-    return `${sessions[0].start.replace(':', '.')}-${sessions[sessions.length - 1].end.replace(':', '.')} WIB`;
+    if (!schedule?.startTime || !schedule?.endTime) return '-';
+    return `${schedule.startTime.replace(':', '.')}-${schedule.endTime.replace(':', '.')} WIB`;
   }
 
   function downloadProgramPdf(programStudy) {
